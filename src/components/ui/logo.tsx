@@ -11,6 +11,7 @@ export function DeetaIcon({ className = "size-10", priority = false }: { classNa
       src={iconSource}
       width={40}
       height={40}
+      unoptimized
       priority={priority}
       alt=""
       aria-hidden="true"
@@ -35,6 +36,7 @@ export function DeetaBrandLogo({ href = "/", className = "w-40" }: { href?: Rout
         src={logoSource}
         width={180}
         height={60}
+        unoptimized
         priority
         alt=""
         className={`h-auto object-contain ${className}`}
