@@ -1,0 +1,2 @@
+ALTER TABLE "cash_session" DROP CONSTRAINT "cash_session_expected_nonnegative";--> statement-breakpoint
+ALTER TABLE "business" ADD CONSTRAINT "business_timezone_supported" CHECK ("business"."timezone" in ('America/Argentina/Buenos_Aires', 'America/Montevideo'));
