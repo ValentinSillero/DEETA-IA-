@@ -54,7 +54,9 @@ body {
 
 button, input, select, textarea { font: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
-button { touch-action: manipulation; }
+:is(button, a, select, summary, input[type="button"], input[type="submit"], input[type="reset"], [role="button"]) {
+  touch-action: manipulation;
+}
 
 :is(button, a, input, select, textarea):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--deeta-primary) 62%, white);
