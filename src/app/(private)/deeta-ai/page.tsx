@@ -15,5 +15,5 @@ export default async function DeetaAiPage() {
   if (!context) redirect("/onboarding");
   if (context.role === "EMPLOYEE") redirect("/dashboard");
   const [conversation, configuration] = await Promise.all([getLatestAiConversationForUser(session.user.id), Promise.resolve(getAiConfiguration())]);
-  return <AiChat enabled={configuration.available} initialConversation={conversation ? { id: conversation.id, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content })) } : null} />;
+  return <AiChat enabled={configuration.available} initialConversation={conversation ? { id: conversation.id, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, presentation: message.presentation })) } : null} />;
 }

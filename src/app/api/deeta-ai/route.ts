@@ -12,5 +12,8 @@ export async function POST(request: Request) {
   const result = await askDeetaAi(session.user.id, { question: parsed.data.question, conversationId: parsed.data.conversationId ?? null });
   if (result.ok) return Response.json(result);
   const status = result.reason === "FORBIDDEN" ? 403 : result.reason === "RATE_LIMIT" || result.reason === "MONTHLY_LIMIT" ? 429 : result.reason === "INVALID_CONVERSATION" ? 404 : 503;
-  return Response.json({ error: result.reason }, { status });
+  const headers = result.reason === "RATE_LIMIT" && result.retryAfterSeconds !== undefined
+    ? { "Retry-After": String(result.retryAfterSeconds) }
+    : undefined;
+  return Response.json({ error: result.reason, retryAfterSeconds: result.retryAfterSeconds, rateLimitKind: result.rateLimitKind }, { status, headers });
 }

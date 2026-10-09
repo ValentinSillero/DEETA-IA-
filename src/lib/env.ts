@@ -16,8 +16,12 @@ const positiveInteger = (fallback: number) => z.preprocess(
 );
 
 const aiEnvSchema = z.object({
-  OPENAI_API_KEY: optionalSecret,
-  OPENAI_MODEL: optionalText.default("gpt-5.4-mini"),
+  AI_PROVIDER: z.preprocess(
+    (value) => value === undefined || value === "" ? "groq" : value,
+    z.literal("groq"),
+  ),
+  GROQ_API_KEY: optionalSecret,
+  GROQ_MODEL: optionalText.default("openai/gpt-oss-20b"),
   DEETA_AI_TIMEOUT_MS: positiveInteger(15_000),
   DEETA_AI_REQUESTS_PER_MINUTE: positiveInteger(8),
   DEETA_AI_MONTHLY_LIMIT: positiveInteger(100),
@@ -61,8 +65,9 @@ export function getServerEnv() {
 
 export function getAiConfiguration() {
   const result = aiEnvSchema.safeParse({
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    OPENAI_MODEL: process.env.OPENAI_MODEL,
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GROQ_MODEL: process.env.GROQ_MODEL,
     DEETA_AI_TIMEOUT_MS: process.env.DEETA_AI_TIMEOUT_MS,
     DEETA_AI_REQUESTS_PER_MINUTE: process.env.DEETA_AI_REQUESTS_PER_MINUTE,
     DEETA_AI_MONTHLY_LIMIT: process.env.DEETA_AI_MONTHLY_LIMIT,
@@ -70,9 +75,9 @@ export function getAiConfiguration() {
   if (!result.success) {
     return { available: false as const, issues: result.error.issues.map((issue) => issue.message) };
   }
-  const apiKey = result.data.OPENAI_API_KEY;
+  const apiKey = result.data.GROQ_API_KEY;
   if (!apiKey) {
-    return { available: false as const, issues: ["OPENAI_API_KEY no está configurada"] };
+    return { available: false as const, issues: ["GROQ_API_KEY no está configurada"] };
   }
-  return { available: true as const, ...result.data, OPENAI_API_KEY: apiKey };
+  return { available: true as const, ...result.data, GROQ_API_KEY: apiKey };
 }

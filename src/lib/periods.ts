@@ -1,8 +1,8 @@
 export type AnalysisPeriod = "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS" | "CURRENT_MONTH" | "PREVIOUS_MONTH";
 
 export type DateRange = { start: string; end: string };
-export type AiPeriodKind = "TODAY" | "YESTERDAY" | "LAST_7_DAYS" | "LAST_30_DAYS" | "CURRENT_MONTH" | "PREVIOUS_MONTH" | "SPECIFIC_MONTH";
-export type AiPeriodSelection = { kind: AiPeriodKind; month: string | null };
+export type AiPeriodKind = "TODAY" | "YESTERDAY" | "CURRENT_WEEK" | "PREVIOUS_WEEK" | "LAST_7_DAYS" | "LAST_30_DAYS" | "CURRENT_MONTH" | "PREVIOUS_MONTH" | "CURRENT_YEAR" | "SPECIFIC_MONTH" | "CUSTOM_RANGE";
+export type AiPeriodSelection = { kind: AiPeriodKind; month: string | null; start?: string | null; end?: string | null };
 
 function parseDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -20,6 +20,11 @@ function addDays(value: string, days: number) {
 
 function startOfMonth(value: string) {
   return `${value.slice(0, 7)}-01`;
+}
+
+function startOfWeek(value: string) {
+  const weekday = parseDate(value).getUTCDay();
+  return addDays(value, -((weekday + 6) % 7));
 }
 
 function previousMonthStart(value: string) {
@@ -81,8 +86,38 @@ export function resolveAiPeriod(today: string, selection: AiPeriodSelection): { 
     const yesterday = addDays(today, -1);
     return { current: { start: yesterday, end: yesterday }, previous: { start: addDays(today, -2), end: addDays(today, -2) } };
   }
+  if (selection.kind === "CURRENT_WEEK") {
+    const currentStart = startOfWeek(today);
+    const elapsedDays = Math.floor((parseDate(today).getTime() - parseDate(currentStart).getTime()) / 86_400_000);
+    const previousStart = addDays(currentStart, -7);
+    return {
+      current: { start: currentStart, end: today },
+      previous: { start: previousStart, end: addDays(previousStart, elapsedDays) },
+    };
+  }
+  if (selection.kind === "PREVIOUS_WEEK") {
+    const currentStart = addDays(startOfWeek(today), -7);
+    return {
+      current: { start: currentStart, end: addDays(currentStart, 6) },
+      previous: { start: addDays(currentStart, -7), end: addDays(currentStart, -1) },
+    };
+  }
   if (selection.kind === "LAST_30_DAYS") {
     return resolveAnalysisPeriod(today, "LAST_30_DAYS");
+  }
+  if (selection.kind === "CURRENT_YEAR") {
+    const year = today.slice(0, 4);
+    const previousYear = String(Number(year) - 1);
+    const currentStart = `${year}-01-01`;
+    const elapsedDays = Math.floor((parseDate(today).getTime() - parseDate(currentStart).getTime()) / 86_400_000);
+    return {
+      current: { start: currentStart, end: today },
+      previous: { start: `${previousYear}-01-01`, end: addDays(`${previousYear}-01-01`, elapsedDays) },
+    };
+  }
+  if (selection.kind === "CUSTOM_RANGE") {
+    if (!selection.start || !selection.end) throw new Error("INVALID_AI_PERIOD");
+    return resolveCustomPeriod(today, selection.start, selection.end);
   }
   const month = selection.month;
   if (!month || !/^\d{4}-\d{2}$/.test(month) || month > today.slice(0, 7)) throw new Error("INVALID_AI_PERIOD");

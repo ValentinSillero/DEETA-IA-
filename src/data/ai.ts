@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getSqlClient } from "@/db";
+import { decodeAiMessageContent, encodeAiMessageContent } from "@/lib/ai/message-content";
+import type { AiPresentation } from "@/lib/ai/presentation";
 import type { AiConversationMessage } from "@/lib/ai/types";
 
 export type AiAccessContext = {
@@ -38,11 +40,14 @@ export async function getLatestAiConversationForUser(userId: string) {
     inner join ai_conversation c on c.id = m.conversation_id and c.business_id = m.business_id
     inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
     where m.conversation_id = ${String(conversation.id)} and c.user_id = ${userId}
-    order by m.created_at asc limit 100
+    order by m.created_at desc limit 30
   `;
   return {
     id: String(conversation.id), title: String(conversation.title),
-    messages: messages.map((message) => ({ id: String(message.id), role: message.role as "USER" | "ASSISTANT", content: String(message.content), createdAt: new Date(String(message.created_at)) })),
+    messages: messages.reverse().map((message) => {
+      const decoded = decodeAiMessageContent(String(message.content));
+      return { id: String(message.id), role: message.role as "USER" | "ASSISTANT", content: decoded.content, presentation: decoded.presentation, createdAt: new Date(String(message.created_at)) };
+    }),
   };
 }
 
@@ -66,9 +71,10 @@ export async function getOrCreateAiConversation(userId: string, conversationId: 
   return rows[0] ? String(rows[0].id) : null;
 }
 
-export async function addAiMessageForUser(userId: string, conversationId: string, role: "USER" | "ASSISTANT", content: string) {
+export async function addAiMessageForUser(userId: string, conversationId: string, role: "USER" | "ASSISTANT", content: string, presentation?: AiPresentation) {
   const sql = getSqlClient();
   const id = crypto.randomUUID();
+  const storedContent = role === "ASSISTANT" ? encodeAiMessageContent(content, presentation) : content;
   const rows = await sql`
     with allowed as (
       select c.id, c.business_id from ai_conversation c
@@ -76,7 +82,7 @@ export async function addAiMessageForUser(userId: string, conversationId: string
       where c.id = ${conversationId} and c.user_id = ${userId} limit 1
     ), inserted as (
       insert into ai_message (id, business_id, conversation_id, user_id, role, content)
-      select ${id}, business_id, id, ${userId}, ${role}::ai_message_role, ${content} from allowed
+      select ${id}, business_id, id, ${userId}, ${role}::ai_message_role, ${storedContent} from allowed
       returning id
     ), touched as (
       update ai_conversation c set updated_at = now() from allowed a where c.id = a.id returning c.id
@@ -94,7 +100,7 @@ export async function getRecentAiMessagesForUser(userId: string, conversationId:
     where c.id = ${conversationId} and c.user_id = ${userId}
     order by m.created_at desc limit ${limit}
   `;
-  return rows.reverse().map((row) => ({ role: row.role as AiConversationMessage["role"], content: String(row.content) }));
+  return rows.reverse().map((row) => ({ role: row.role as AiConversationMessage["role"], content: decodeAiMessageContent(String(row.content)).content }));
 }
 
 export async function reserveAiUsage(

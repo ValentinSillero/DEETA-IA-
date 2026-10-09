@@ -19,8 +19,27 @@ describe("períodos de análisis", () => {
     expect(resolveAiPeriod("2026-10-04", { kind: "LAST_30_DAYS", month: null }).current).toEqual({ start: "2026-09-05", end: "2026-10-04" });
   });
 
+  it("distingue la semana calendario actual y la semana pasada de los últimos 7 días", () => {
+    expect(resolveAiPeriod("2026-10-09", { kind: "CURRENT_WEEK", month: null })).toEqual({
+      current: { start: "2026-10-05", end: "2026-10-09" },
+      previous: { start: "2026-09-28", end: "2026-10-02" },
+    });
+    expect(resolveAiPeriod("2026-10-09", { kind: "PREVIOUS_WEEK", month: null })).toEqual({
+      current: { start: "2026-09-28", end: "2026-10-04" },
+      previous: { start: "2026-09-21", end: "2026-09-27" },
+    });
+    expect(resolveAiPeriod("2026-10-09", { kind: "LAST_7_DAYS", month: null }).current).toEqual({ start: "2026-10-03", end: "2026-10-09" });
+  });
+
   it("resuelve un mes calendario solicitado", () => {
     expect(resolveAiPeriod("2026-10-04", { kind: "SPECIFIC_MONTH", month: "2026-09" }).current).toEqual({ start: "2026-09-01", end: "2026-09-30" });
+  });
+
+  it("compara el año actual contra las mismas fechas del año anterior", () => {
+    expect(resolveAiPeriod("2026-10-09", { kind: "CURRENT_YEAR", month: null })).toEqual({
+      current: { start: "2026-01-01", end: "2026-10-09" },
+      previous: { start: "2025-01-01", end: "2025-10-09" },
+    });
   });
 
   it("compara un período personalizado contra los días inmediatamente anteriores", () => {
@@ -29,5 +48,12 @@ describe("períodos de análisis", () => {
       previous: { start: "2026-08-31", end: "2026-09-09" },
     });
     expect(() => resolveCustomPeriod("2026-10-04", "2026-10-05", "2026-10-06")).toThrow("INVALID_PERIOD");
+  });
+
+  it("acepta un rango personalizado desde DEETA AI", () => {
+    expect(resolveAiPeriod("2026-10-09", { kind: "CUSTOM_RANGE", month: null, start: "2026-09-10", end: "2026-09-19" })).toEqual({
+      current: { start: "2026-09-10", end: "2026-09-19" },
+      previous: { start: "2026-08-31", end: "2026-09-09" },
+    });
   });
 });

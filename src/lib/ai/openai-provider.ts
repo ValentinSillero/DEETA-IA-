@@ -67,6 +67,7 @@ export class OpenAiResponsesProvider implements AiProvider {
     let outputTokens = 0;
     let totalTokens = 0;
     let toolCalls = 0;
+    const toolsUsed: string[] = [];
     const evidence: unknown[] = [];
 
     for (let round = 0; round < 4; round += 1) {
@@ -87,7 +88,7 @@ export class OpenAiResponsesProvider implements AiProvider {
         const text = responseText(response);
         if (!text) throw new AiProviderError("INVALID_RESPONSE");
         if (unsupportedNumericClaims(text, evidence).length > 0) throw new AiProviderError("INVALID_RESPONSE");
-        return { text, model: this.model, inputTokens, outputTokens, totalTokens, toolCalls };
+        return { text, model: this.model, inputTokens, outputTokens, totalTokens, cachedTokens: 0, toolCalls, toolsUsed, providerRequests: round + 1 };
       }
       input.push(...(response.output ?? []));
       for (const call of calls) {
@@ -97,6 +98,7 @@ export class OpenAiResponsesProvider implements AiProvider {
         const result = await request.executeTool(call.name, args);
         evidence.push(result);
         toolCalls += 1;
+        toolsUsed.push(call.name);
         input.push({
           type: "function_call_output",
           call_id: call.call_id,

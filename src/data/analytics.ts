@@ -21,11 +21,13 @@ export async function getFinancialAnalyticsForUser(
   userId: string,
   period: AnalysisPeriod,
   rangesOverride?: { current: DateRange; previous: DateRange },
+  businessIdOverride?: string,
 ) {
   const sql = getSqlClient();
   const contextRows = await sql`
     select b.id as business_id, b.timezone, timezone(b.timezone, now())::date::text as today
     from business b inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
+    where (${businessIdOverride ?? null}::text is null or b.id = ${businessIdOverride ?? null})
     limit 1
   `;
   const context = contextRows[0];
@@ -143,6 +145,7 @@ export async function getFinancialAnalyticsForUser(
 export function getFinancialAnalyticsForRangesForUser(
   userId: string,
   ranges: { current: DateRange; previous: DateRange },
+  businessId?: string,
 ) {
-  return getFinancialAnalyticsForUser(userId, "TODAY", ranges);
+  return getFinancialAnalyticsForUser(userId, "TODAY", ranges, businessId);
 }

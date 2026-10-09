@@ -54,7 +54,7 @@ export type DailyEvolution = {
 
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-async function getAnalyticsContext(userId: string): Promise<AnalyticsContext | null> {
+async function getAnalyticsContext(userId: string, businessId?: string): Promise<AnalyticsContext | null> {
   const sql = getSqlClient();
   const rows = await sql`
     select b.id as business_id, b.timezone, timezone(b.timezone, now())::date::text as today,
@@ -65,6 +65,7 @@ async function getAnalyticsContext(userId: string): Promise<AnalyticsContext | n
     from business b
     inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
     left join sale s on s.business_id = b.id and s.status = 'COMPLETED'
+    where (${businessId ?? null}::text is null or b.id = ${businessId ?? null})
     group by b.id, b.timezone, b.created_at
     limit 1
   `;
@@ -126,15 +127,16 @@ export async function getIntelligentAnalyticsForUser(
   userId: string,
   ranges: { current: DateRange; previous: DateRange },
   inventoryDays = 30,
+  businessId?: string,
 ) {
-  const context = await getAnalyticsContext(userId);
+  const context = await getAnalyticsContext(userId, businessId);
   if (!context) return null;
   const sql = getSqlClient();
   const periodDays = calendarDays(ranges.current.start, ranges.current.end);
   const safeInventoryDays = [7, 30, 60].includes(inventoryDays) ? inventoryDays : 30;
 
   const [financial, productRows, evolutionRows, weekdayRows, hourRows] = await Promise.all([
-    getFinancialAnalyticsForRangesForUser(userId, ranges),
+    getFinancialAnalyticsForRangesForUser(userId, ranges, context.businessId),
     sql`
       with product_sales as (
         select si.product_id,
