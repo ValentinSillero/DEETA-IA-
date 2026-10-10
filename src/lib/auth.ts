@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import { getDb } from "@/db";
 import { authSchema } from "@/db/schema";
+import { getTrustedAuthOrigins } from "@/lib/auth-origins";
 import { getServerEnv } from "@/lib/env";
 
 function createAuth() {
@@ -24,6 +25,7 @@ function createAuth() {
     },
     secret: serverEnv.BETTER_AUTH_SECRET,
     baseURL: serverEnv.BETTER_AUTH_URL,
+    trustedOrigins: getTrustedAuthOrigins(serverEnv.BETTER_AUTH_URL),
   });
 }
 
