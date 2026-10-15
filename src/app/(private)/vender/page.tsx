@@ -1,17 +1,48 @@
+import { FileUp, PackagePlus, Plus } from "lucide-react";
 import type { Metadata } from "next";
 
+import { EmptyState } from "@/components/empty-state";
 import { SaleComposer } from "@/components/sales/sale-composer";
 import { getOpenCashSessionForUser } from "@/data/cash";
+import { getBusinessOnboardingStateForUser } from "@/data/onboarding";
 import { getSaleProductsForUser } from "@/data/sales";
+import { canManageCatalog } from "@/lib/onboarding";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Nueva venta" };
 
 export default async function SellPage() {
   const session = await requireSession();
-  const [products, openCash] = await Promise.all([
+  const [products, openCash, onboarding] = await Promise.all([
     getSaleProductsForUser(session.user.id),
     getOpenCashSessionForUser(session.user.id),
+    getBusinessOnboardingStateForUser(session.user.id),
   ]);
-  return <div><div className="mb-6"><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-mint-600">Venta rápida</p><h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Nueva venta</h1><p className="mt-2 text-muted">Buscá, agregá y cobrá.</p></div><SaleComposer products={products} hasOpenCash={Boolean(openCash)} /></div>;
+  const header = <div className="mb-6"><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-mint-600">Venta rápida</p><h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Nueva venta</h1><p className="mt-2 text-muted">Buscá, agregá y cobrá.</p></div>;
+
+  if (products.length === 0 && onboarding) {
+    const manage = canManageCatalog(onboarding.role);
+    const noProducts = !onboarding.signals.hasProducts;
+    return <div>{header}{noProducts ? (
+      <EmptyState
+        className=""
+        icon={PackagePlus}
+        title="Primero cargá tus productos"
+        description="Necesitás cargar al menos un producto antes de registrar una venta."
+        actions={manage ? [{ label: "Agregar producto", href: "/productos/nuevo", icon: Plus }, { label: "Importar productos", href: "/productos/importar", icon: FileUp, variant: "secondary" }] : []}
+        note={manage ? undefined : "Pedile a quien administra el negocio que cargue los productos."}
+      />
+    ) : (
+      <EmptyState
+        className=""
+        icon={PackagePlus}
+        title="No hay productos con stock"
+        description="Para vender, al menos un producto activo tiene que tener unidades disponibles."
+        actions={manage ? [{ label: "Cargar stock", href: "/productos?estado=out" }] : []}
+        note={manage ? undefined : "Pedile a quien administra el negocio que cargue el stock."}
+      />
+    )}</div>;
+  }
+
+  return <div>{header}<SaleComposer products={products} hasOpenCash={Boolean(openCash)} /></div>;
 }

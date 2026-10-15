@@ -4,8 +4,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { EvolutionChart } from "@/components/analytics/evolution-chart";
+import { EmptyState } from "@/components/empty-state";
 import { getAnalyticsContextForUser } from "@/data/analytics-context";
 import { getIntelligentAnalyticsForUser, type IntelligentProduct } from "@/data/intelligent-analytics";
+import { getBusinessOnboardingStateForUser } from "@/data/onboarding";
+import { canManageCatalog } from "@/lib/onboarding";
 import { buildAnalysisSummary, comparisonChangeText, comparisonLabel, comparisonReference, formatAnalysisMoney, metricExplanation } from "@/lib/analytics-presentation";
 import { formatMoney } from "@/lib/inventory";
 import { resolveAnalysisPeriod, resolveCustomPeriod, type AnalysisPeriod } from "@/lib/periods";
@@ -48,8 +51,17 @@ function ProductRow({ product, value, detail }: { product: IntelligentProduct; v
 function Priority({ value }: { value: IntelligentProduct["reorderPriority"] }) { const styles = value === "URGENT" ? "bg-red-100 text-red-700" : value === "SOON" ? "bg-orange-100 text-orange-700" : "bg-accent-soft text-success"; return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${styles}`}>{value === "URGENT" ? "Urgente" : value === "SOON" ? "Próximamente" : "Bien"}</span>; }
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ periodo?: string; desde?: string; hasta?: string }> }) {
-  const session = await requireSession(); const [params, analyticsContext] = await Promise.all([searchParams, getAnalyticsContextForUser(session.user.id)]);
+  const session = await requireSession(); const [params, analyticsContext, onboarding] = await Promise.all([searchParams, getAnalyticsContextForUser(session.user.id), getBusinessOnboardingStateForUser(session.user.id)]);
   if (!analyticsContext) redirect("/onboarding");
+  // Sin ninguna venta ni gasto histórico no mostramos cifras en $0 como si fueran un análisis real.
+  if (onboarding && !onboarding.signals.hasSales && !onboarding.signals.hasExpenses) {
+    const { hasStock } = onboarding.signals;
+    const actions = hasStock
+      ? [{ label: "Registrar primera venta", href: "/vender" }]
+      : canManageCatalog(onboarding.role) ? [{ label: "Cargar productos", href: "/productos" }] : [];
+    return <div><header><p className="section-label">Mi negocio</p><h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Análisis</h1></header>
+      <EmptyState icon={BarChart3} title="Todavía no hay suficiente actividad para analizar" description="Cuando registres ventas y gastos, acá vas a poder entender cómo viene tu negocio: cuánto vendés, cuánto ganás y qué conviene reponer." actions={actions} /></div>;
+  }
   const today = localToday(analyticsContext.timezone); const requested = periods.some((item) => item.value === params.periodo) ? params.periodo as AnalysisPeriod | "CUSTOM" : "CURRENT_MONTH";
   const period = requested; let customError = false; let ranges;
   if (period === "CUSTOM") {

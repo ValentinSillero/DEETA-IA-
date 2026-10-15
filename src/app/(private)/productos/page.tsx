@@ -86,9 +86,9 @@ export default async function ProductsPage({
       {trulyEmpty ? (
         <section className="deeta-rule mt-8 rounded-2xl border border-line bg-surface px-5 py-12 text-center sm:px-8 sm:py-16">
           <span className="icon-box mx-auto size-14"><PackagePlus className="size-7" aria-hidden="true" /></span>
-          <h2 className="mt-5 text-2xl font-black tracking-tight">Empezá cargando tu primer producto</h2>
-          <p className="mx-auto mt-3 max-w-md leading-7 text-muted">DEETA va a ayudarte a mantener controlada tu mercadería.</p>
-          {role !== "EMPLOYEE" && <div className="mx-auto mt-7 grid max-w-md gap-2 sm:grid-cols-2"><Link href="/productos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link><Link href="/productos/importar" className="button-secondary"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link></div>}
+          <h2 className="mt-5 text-2xl font-black tracking-tight">Todavía no cargaste productos</h2>
+          <p className="mx-auto mt-3 max-w-md leading-7 text-muted">Agregá tus productos para empezar a vender y controlar stock.</p>
+          {role !== "EMPLOYEE" ? <><div className="mx-auto mt-7 grid max-w-md gap-2 sm:grid-cols-2"><Link href="/productos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Agregar producto</Link><Link href="/productos/importar" className="button-secondary"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link></div><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-muted">¿Tenés tus productos en Excel? Podés cargarlos todos juntos.</p></> : <p className="mx-auto mt-5 max-w-md text-sm leading-6 text-muted">Pedile a quien administra el negocio que cargue los productos.</p>}
         </section>
       ) : products.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-line bg-surface px-5 py-10 text-center">

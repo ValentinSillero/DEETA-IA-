@@ -137,6 +137,12 @@ La prueba integrada de DEETA AI cubre aislamiento entre negocios, productos más
 $env:RUN_DB_TESTS="1"; npm test -- src/data/ai-tools.integration.test.ts
 ```
 
+La prueba integrada de primeros pasos cubre un negocio nuevo, uno parcial, uno completo, el aislamiento entre negocios y el rol de empleado:
+
+```powershell
+$env:RUN_DB_TESTS="1"; npm test -- src/data/onboarding.integration.test.ts
+```
+
 ## Estructura
 
 ```text

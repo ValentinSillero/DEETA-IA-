@@ -19,21 +19,26 @@ import { getFinancialSummaryForUser } from "@/data/analytics";
 import { getBusinessForUser } from "@/data/businesses";
 import { getOpenCashSessionForUser } from "@/data/cash";
 import { getDashboardDetectionsForUser } from "@/data/intelligent-analytics";
+import { getOnboardingPlanForUser } from "@/data/onboarding";
 import { getProductCountsForUser } from "@/data/products";
+import { GettingStarted } from "@/components/onboarding/getting-started";
 import { buildDeterministicInsights } from "@/lib/ai/insights";
 import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
 
 export default async function DashboardPage() {
   const session = await requireSession();
-  const [productCounts, analytics, openCash, businessContext, detections] = await Promise.all([
+  const [productCounts, analytics, openCash, businessContext, detections, onboarding] = await Promise.all([
     getProductCountsForUser(session.user.id),
     getFinancialSummaryForUser(session.user.id, "TODAY"),
     getOpenCashSessionForUser(session.user.id),
     getBusinessForUser(session.user.id),
     getDashboardDetectionsForUser(session.user.id),
+    getOnboardingPlanForUser(session.user.id),
   ]);
   if (!analytics) return null;
+  const hasSales = onboarding?.state.signals.hasSales ?? true;
+  const hasProducts = onboarding?.state.signals.hasProducts ?? true;
 
   const sales = {
     totalCents: analytics.current.salesCents,
@@ -62,6 +67,8 @@ export default async function DashboardPage() {
         </div>
         <p className="mt-3 text-sm font-bold text-muted sm:mt-0">{sales.operations} {sales.operations === 1 ? "venta registrada" : "ventas registradas"}</p>
       </header>
+
+      {onboarding && <GettingStarted plan={onboarding.plan} />}
 
       <section className="deeta-rule overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="ventas-hoy">
         <div className="grid gap-6 px-5 py-6 sm:px-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -127,8 +134,8 @@ export default async function DashboardPage() {
         <section>
           <h2 className="section-title mb-3">Lectura rápida</h2>
           <div className="panel deeta-rule h-[calc(100%-2.25rem)]">
-            {detections && <><p className="section-label">DEETA detectó</p><p className="mt-2 text-lg font-black">{detections.urgentCount > 0 ? `${detections.urgentCount} ${detections.urgentCount === 1 ? "producto necesita" : "productos necesitan"} atención` : "La reposición está al día"}</p><p className="mt-2 text-sm leading-6 text-muted">{detections.immobilizedValueCents > 0 ? `${formatMoney(detections.immobilizedValueCents)} en mercadería con poco movimiento.` : "No hay stock inmovilizado relevante."}</p></>}
-            {businessContext?.role !== "EMPLOYEE" && <div className="mt-5 border-t border-line pt-5"><div className="flex gap-3"><Bot className="mt-0.5 size-5 shrink-0 text-mint-600" aria-hidden="true" /><div><p className="font-black">Una pregunta útil</p><p className="mt-1 text-sm leading-6 text-muted">{aiInsight}</p></div></div><Link href="/deeta-ai" className="button-secondary mt-4 w-full">Preguntarle a DEETA</Link></div>}
+            {!hasProducts ? <><p className="section-label">DEETA detectó</p><p className="mt-2 text-lg font-black">Todavía no hay productos para revisar</p><p className="mt-2 text-sm leading-6 text-muted">Cuando cargues tu mercadería, acá vas a ver qué conviene reponer.</p></> : detections && <><p className="section-label">DEETA detectó</p><p className="mt-2 text-lg font-black">{detections.urgentCount > 0 ? `${detections.urgentCount} ${detections.urgentCount === 1 ? "producto necesita" : "productos necesitan"} atención` : "La reposición está al día"}</p><p className="mt-2 text-sm leading-6 text-muted">{detections.immobilizedValueCents > 0 ? `${formatMoney(detections.immobilizedValueCents)} en mercadería con poco movimiento.` : "No hay stock inmovilizado relevante."}</p></>}
+            {businessContext?.role !== "EMPLOYEE" && (hasSales ? <div className="mt-5 border-t border-line pt-5"><div className="flex gap-3"><Bot className="mt-0.5 size-5 shrink-0 text-mint-600" aria-hidden="true" /><div><p className="font-black">Una pregunta útil</p><p className="mt-1 text-sm leading-6 text-muted">{aiInsight}</p></div></div><Link href="/deeta-ai" className="button-secondary mt-4 w-full">Preguntarle a DEETA</Link></div> : <div className="mt-5 border-t border-line pt-5"><div className="flex gap-3"><Bot className="mt-0.5 size-5 shrink-0 text-mint-600" aria-hidden="true" /><div><p className="font-black">DEETA AI</p><p className="mt-1 text-sm leading-6 text-muted">Cuando registres tus primeras ventas, DEETA AI va a poder ayudarte a analizar tu negocio.</p></div></div></div>)}
           </div>
         </section>
       </div>

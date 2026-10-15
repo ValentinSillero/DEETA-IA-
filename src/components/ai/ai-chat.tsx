@@ -53,7 +53,7 @@ function ChatMessage({ message }: { message: Message }) {
   </article>;
 }
 
-export function AiChat({ enabled, initialConversation }: { enabled: boolean; initialConversation: { id: string; messages: Message[] } | null }) {
+export function AiChat({ enabled, initialConversation, notice }: { enabled: boolean; initialConversation: { id: string; messages: Message[] } | null; notice?: React.ReactNode }) {
   const [conversationId, setConversationId] = useState(initialConversation?.id ?? null);
   const [messages, setMessages] = useState<Message[]>(initialConversation?.messages ?? []);
   const [question, setQuestion] = useState("");
@@ -105,6 +105,7 @@ export function AiChat({ enabled, initialConversation }: { enabled: boolean; ini
       <button type="button" onClick={newConversation} className="button-secondary shrink-0 px-3 sm:px-4" disabled={pending} aria-label="Iniciar una nueva conversación"><Plus className="size-5" aria-hidden="true" /><span className="hidden sm:inline">Nueva conversación</span></button>
     </header>
     {!enabled && <div className="notice-error mt-6" role="alert">DEETA AI está temporalmente no disponible porque falta configurar el proveedor. El resto de DEETA sigue funcionando normalmente.</div>}
+    {notice}
     <section className="mt-6 overflow-hidden rounded-2xl border border-line bg-surface">
       <div ref={transcript} className="max-h-[60dvh] min-h-[360px] overflow-y-auto px-4 py-5 sm:min-h-[470px] sm:px-7 sm:py-7" aria-live="polite" aria-busy={pending}>
         {messages.length === 0 ? <div className="grid min-h-[315px] place-items-center"><div className="w-full max-w-2xl"><div className="flex items-start gap-3"><Lightbulb className="mt-1 size-6 shrink-0 text-mint-600" aria-hidden="true" /><div><h2 className="text-xl font-black">Empezá por una decisión concreta</h2><p className="mt-2 text-sm leading-6 text-muted">Podés consultar ventas, gastos, margen, stock, caja y productos. Estas preguntas son un buen punto de partida.</p></div></div><div className="mt-6 grid gap-2 sm:grid-cols-2">{suggestions.map((item) => <button key={item} type="button" onClick={() => void ask(item)} disabled={!enabled || pending} className="min-h-12 rounded-xl border border-line bg-canvas px-4 py-3 text-left text-sm font-extrabold text-ink transition-colors hover:border-mint-400 hover:bg-mint-50 disabled:opacity-50">{item}</button>)}</div></div></div> : <div className="grid min-w-0 gap-7">{messages.map((message) => <ChatMessage key={message.id} message={message} />)}{pending && <div className="flex items-center gap-3 border-l-4 border-mint-400 pl-4 text-sm font-bold text-muted"><DeetaIcon className="size-9" /> Analizando datos…</div>}</div>}
