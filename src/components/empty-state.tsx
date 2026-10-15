@@ -12,7 +12,7 @@ export function EmptyState({
   description,
   actions = [],
   note,
-  className = "mt-7",
+  className = "mt-6",
 }: {
   icon: LucideIcon;
   title: string;
@@ -22,20 +22,22 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <section className={`deeta-rule rounded-2xl border border-line bg-surface px-5 py-10 text-center sm:px-8 sm:py-14 ${className}`}>
-      <span className="icon-box mx-auto size-14"><Icon className="size-7" aria-hidden="true" /></span>
-      <h2 className="mx-auto mt-5 max-w-md text-2xl font-black tracking-tight">{title}</h2>
-      <p className="mx-auto mt-3 max-w-md leading-7 text-muted">{description}</p>
-      {actions.length > 0 && (
-        <div className={`mx-auto mt-7 grid max-w-md gap-2 ${actions.length > 1 ? "sm:grid-cols-2" : ""}`}>
-          {actions.map(({ label, href, icon: ActionIcon, variant = "primary" }) => (
-            <Link key={href} href={href as Route} className={variant === "primary" ? "button-primary" : "button-secondary"}>
-              {ActionIcon && <ActionIcon className="size-5" aria-hidden="true" />} {label}
-            </Link>
-          ))}
-        </div>
-      )}
-      {note && <p className="mx-auto mt-5 max-w-md text-sm leading-6 text-muted">{note}</p>}
+    <section className={`rounded-2xl border border-line bg-surface px-5 py-9 sm:px-8 sm:py-12 ${className}`}>
+      <div className="mx-auto max-w-md text-center">
+        <Icon className="mx-auto size-8 text-muted" strokeWidth={1.6} aria-hidden="true" />
+        <h2 className="mt-4 text-xl font-bold">{title}</h2>
+        <p className="mt-2 leading-7 text-muted">{description}</p>
+        {actions.length > 0 && (
+          <div className={`mt-6 grid gap-2 ${actions.length > 1 ? "sm:grid-cols-2" : "sm:mx-auto sm:max-w-64"}`}>
+            {actions.map(({ label, href, icon: ActionIcon, variant = "primary" }) => (
+              <Link key={href} href={href as Route} className={variant === "primary" ? "button-primary" : "button-secondary"}>
+                {ActionIcon && <ActionIcon className="size-5" aria-hidden="true" />} {label}
+              </Link>
+            ))}
+          </div>
+        )}
+        {note && <p className="mt-4 text-sm leading-6 text-muted">{note}</p>}
+      </div>
     </section>
   );
 }

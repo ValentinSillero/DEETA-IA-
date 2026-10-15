@@ -17,8 +17,8 @@ export default async function ImportProductsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/productos" className="inline-flex items-center gap-2 text-sm font-bold text-muted hover:text-ink"><ArrowLeft className="size-4" aria-hidden="true" /> Volver a productos</Link>
-      <p className="section-label mt-7">Carga masiva</p>
-      <h1 className="mt-2 text-balance text-3xl font-black tracking-[-0.04em] sm:text-4xl">Importar productos</h1>
+      
+      <h1 className="page-title">Importar productos</h1>
       <p className="mt-3 max-w-2xl text-pretty leading-7 text-muted">Si ya tenés tus productos en Excel o CSV, podés cargarlos todos juntos. Nada se importa hasta que revises y confirmes.</p>
       <ProductImportUpload />
     </div>

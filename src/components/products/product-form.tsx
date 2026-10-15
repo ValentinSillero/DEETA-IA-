@@ -106,7 +106,7 @@ export function ProductForm({
       </div>
       <div><Field label="Código de barras (opcional)" name="barcode" inputMode="text" placeholder="Podés escribirlo manualmente" value={barcode} onChange={(event) => setBarcode(event.target.value)} error={state.errors?.barcode?.[0]} /><button type="button" onClick={() => setScannerOpen(true)} className="button-secondary mt-3 w-full"><Camera className="size-5" /> Escanear código</button></div>
       {editing && (
-        <p className="rounded-2xl bg-[#f3f2f8] px-4 py-3 text-sm leading-6 text-muted">
+        <p className="rounded-2xl bg-surface-2 px-4 py-3 text-sm leading-6 text-muted">
           Para cambiar la cantidad disponible usá las acciones de stock en la pantalla del producto.
         </p>
       )}
@@ -117,7 +117,7 @@ export function ProductForm({
       )}
       <ActionSubmitButton>{editing ? "Guardar cambios" : "Crear producto"}</ActionSubmitButton>
       <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={(scan: ScannedBarcode) => { setScannerOpen(false); setPendingBarcode(scan.value); }} />
-      {pendingBarcode && <div className="fixed inset-0 z-[80] grid place-items-end bg-ink/55 sm:place-items-center sm:p-5"><section className="w-full max-w-md rounded-t-[30px] bg-white p-6 sm:rounded-[30px]"><p className="text-sm font-bold text-mint-600">Código leído</p><h2 className="mt-2 text-xl font-black">¿Querés asociarlo a {product?.name ?? "este producto"}?</h2><p className="mt-4 rounded-2xl bg-[#f3f2f8] p-4 font-mono font-bold">{pendingBarcode}</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setPendingBarcode(undefined)} className="button-secondary">Cancelar</button><button type="button" onClick={() => { setBarcode(pendingBarcode); setPendingBarcode(undefined); }} className="button-primary">Asociar</button></div></section></div>}
+      {pendingBarcode && <div className="fixed inset-0 z-[80] grid place-items-end bg-ink/55 sm:place-items-center sm:p-5"><section className="w-full max-w-md rounded-t-[30px] bg-white p-6 sm:rounded-2xl"><p className="text-sm font-bold text-mint-600">Código leído</p><h2 className="mt-2 text-xl font-black">¿Querés asociarlo a {product?.name ?? "este producto"}?</h2><p className="mt-4 rounded-2xl bg-surface-2 p-4 font-mono font-bold">{pendingBarcode}</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setPendingBarcode(undefined)} className="button-secondary">Cancelar</button><button type="button" onClick={() => { setBarcode(pendingBarcode); setPendingBarcode(undefined); }} className="button-primary">Asociar</button></div></section></div>}
     </form>
   );
 }

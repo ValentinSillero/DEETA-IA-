@@ -34,7 +34,7 @@ export function StockManager({
           <p className="mt-1 text-xs font-bold text-muted">Mínimo recomendado: {minimumStock}</p>
         </div>
       </div>
-      <div className="mt-6 grid grid-cols-3 gap-1 rounded-xl border border-line bg-[#f3f2f8] p-1" role="tablist" aria-label="Acciones de stock">
+      <div className="mt-6 grid grid-cols-3 gap-1 rounded-xl border border-line bg-surface-2 p-1" role="tablist" aria-label="Acciones de stock">
         {modes.map(({ type, label, icon: Icon }) => (
           <button
             key={type}

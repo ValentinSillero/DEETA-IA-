@@ -15,7 +15,7 @@ export function CategoryManager({ categories, canManage }: { categories: Expense
   const [state, action] = useActionState(createExpenseCategoryAction, { status: "idle" } satisfies ExpenseMutationState);
 
   return <div>
-    <section className="panel deeta-rule">
+    <section className="panel">
       <h2 className="section-title">Nueva categoría</h2>
       {canManage ? <form action={action} className="mt-4 flex flex-col gap-3 sm:flex-row"><label className="sr-only" htmlFor="new-category-name">Nombre de la categoría</label><input id="new-category-name" name="name" className="field-input min-w-0 flex-1" placeholder="Ej. Proveedores" required /><ActionSubmitButton className="button-primary shrink-0">Crear categoría</ActionSubmitButton></form> : <p className="mt-3 text-sm text-muted">Solo administradores pueden cambiar categorías.</p>}
       {state.message && <p className={`mt-3 ${state.status === "success" ? "notice-success" : "notice-error"}`} role="status">{state.message}</p>}
@@ -27,7 +27,7 @@ export function CategoryManager({ categories, canManage }: { categories: Expense
 function CategoryRow({ category, canManage }: { category: ExpenseCategoryDto; canManage: boolean }) {
   const [state, action] = useActionState(updateExpenseCategoryAction, { status: "idle" } satisfies ExpenseMutationState);
 
-  return <article className={`border-b border-line p-4 last:border-b-0 ${category.isActive ? "bg-surface" : "bg-[#f3f2f8] opacity-70"}`}>
+  return <article className={`border-b border-line p-4 last:border-b-0 ${category.isActive ? "bg-surface" : "bg-surface-2 opacity-70"}`}>
     <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <input type="hidden" name="categoryId" value={category.id} />
       <input name="name" defaultValue={category.name} disabled={!canManage} className="field-input min-w-0 flex-1" aria-label={`Nombre de ${category.name}`} />

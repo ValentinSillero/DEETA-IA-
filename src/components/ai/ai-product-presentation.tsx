@@ -7,7 +7,7 @@ const statusDetails: Record<AiProductStatus, { label: string; className: string;
   low_stock: { label: "Bajo stock", className: "border-orange-200 bg-orange-100 text-[#7b3f22]", icon: AlertTriangle },
   urgent_restock: { label: "Reposición urgente", className: "border-red-200 bg-red-50 text-red-800", icon: AlertTriangle },
   restock_soon: { label: "Reponer pronto", className: "border-orange-200 bg-orange-100 text-[#7b3f22]", icon: CircleGauge },
-  slow_moving: { label: "Baja rotación", className: "border-line bg-[#f3f2f8] text-ink", icon: TrendingDown },
+  slow_moving: { label: "Baja rotación", className: "border-line bg-surface-2 text-ink", icon: TrendingDown },
   excess_stock: { label: "Mucho stock para su ritmo de venta", className: "border-brand/20 bg-brand-soft text-ink", icon: Boxes },
   sufficient_stock: { label: "Stock suficiente", className: "border-emerald-200 bg-emerald-50 text-success", icon: PackageCheck },
 };
@@ -18,7 +18,7 @@ function units(value: number) {
 
 function Metric({ label, value, primary = false }: { label: string; value: string; primary?: boolean }) {
   return <div className={primary ? "col-span-full min-w-0" : "min-w-0"}>
-    <dt className="text-[0.7rem] font-black uppercase tracking-[0.08em] text-muted">{label}</dt>
+    <dt className="text-[0.7rem] font-black text-muted">{label}</dt>
     <dd className={primary ? "mt-1 break-words text-lg font-black leading-tight text-ink" : "mt-1 break-words text-sm font-extrabold text-ink"}>{value}</dd>
   </div>;
 }
@@ -74,7 +74,7 @@ function ProductCard({ item, presentation }: { item: AiProductPresentationItem; 
 }
 
 export function AiProductPresentation({ presentation }: { presentation: AiProductPresentationData }) {
-  return <section className="mt-4 min-w-0 overflow-hidden rounded-xl border border-line bg-canvas" aria-label={presentation.title}>
+  return <section className="mt-4 min-w-0 overflow-hidden rounded-xl border border-line bg-surface" aria-label={presentation.title}>
     <header className="border-b border-line px-4 py-3 sm:px-5">
       <p className="text-sm font-black text-ink">{presentation.title}</p>
       {presentation.periodLabel ? <p className="mt-0.5 text-xs font-semibold text-muted">{presentation.periodLabel}</p> : null}

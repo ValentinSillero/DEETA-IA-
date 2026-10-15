@@ -16,10 +16,9 @@ export default async function SignInPage() {
 
   return (
     <section>
-      <p className="section-label mb-3">Qué bueno verte</p>
-      <h1 className="text-4xl font-black tracking-[-0.045em] text-ink sm:text-5xl">Ingresá a DEETA</h1>
-      <p className="mt-4 text-base leading-7 text-muted">Tu negocio te está esperando.</p>
-      <div className="panel mt-8"><AuthForm mode="sign-in" /></div>
+      <h1 className="page-title">Ingresá a DEETA</h1>
+      <p className="page-lead">Tu negocio te está esperando.</p>
+      <div className="panel mt-6"><AuthForm mode="sign-in" /></div>
     </section>
   );
 }

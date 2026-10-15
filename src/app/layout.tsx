@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, Schibsted_Grotesk } from "next/font/google";
 
 import "./globals.css";
+
+const ui = Inter({ subsets: ["latin"], variable: "--font-ui", display: "swap" });
+const heading = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-heading", display: "swap" });
 
 export const metadata: Metadata = {
   title: {
@@ -21,12 +25,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#f7f6fb",
+  themeColor: "#f6f5f9",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es">
+    <html lang="es" className={`${ui.variable} ${heading.variable}`}>
       <body>{children}</body>
     </html>
   );

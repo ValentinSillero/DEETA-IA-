@@ -68,18 +68,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {item.isActive ? <StockStatusBadge currentStock={item.currentStock} minimumStock={item.minimumStock} /> : <span className="rounded-full bg-[#f3f2f8] px-3 py-1.5 text-sm font-extrabold text-muted">Desactivado</span>}
+            {item.isActive ? <StockStatusBadge currentStock={item.currentStock} minimumStock={item.minimumStock} /> : <span className="rounded-full bg-surface-2 px-3 py-1.5 text-sm font-extrabold text-muted">Desactivado</span>}
           </div>
-          <h1 className="mt-3 break-words text-3xl font-black tracking-[-0.04em] sm:text-4xl">{item.name}</h1>
+          <h1 className="mt-3 page-title break-words">{item.name}</h1>
           {item.description && <p className="mt-3 max-w-2xl leading-7 text-muted">{item.description}</p>}
         </div>
         <Link href={`/productos/${item.id}/editar`} className="button-secondary shrink-0"><Edit3 className="size-4" /> Editar información</Link>
       </div>
 
       <section className="mt-7 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-[22px] border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de compra</p><p className="mt-2 text-xl font-black">{formatMoney(item.costPriceCents)}</p></div>
-        <div className="rounded-[22px] border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de venta</p><p className="mt-2 text-xl font-black text-mint-600">{formatMoney(item.salePriceCents)}</p></div>
-        <div className="rounded-[22px] border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Ganancia estimada por unidad</p><p className={`mt-2 text-xl font-black ${margin < 0 ? "text-red-700" : ""}`}>{formatMoney(margin)}</p></div>
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de compra</p><p className="mt-2 text-xl font-black">{formatMoney(item.costPriceCents)}</p></div>
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de venta</p><p className="mt-2 text-xl font-black text-mint-600">{formatMoney(item.salePriceCents)}</p></div>
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Ganancia estimada por unidad</p><p className={`mt-2 text-xl font-black ${margin < 0 ? "text-red-700" : ""}`}>{formatMoney(margin)}</p></div>
       </section>
 
       {item.barcode && <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-muted"><Barcode className="size-4" /> {item.barcode}</p>}
@@ -97,16 +97,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <section className="panel min-w-0">
           <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-[#edf3ff] text-[#506ca8]"><History className="size-5" /></span><div><h2 className="text-xl font-black">Movimientos</h2><p className="text-sm text-muted">El historial de este producto</p></div></div>
           {movements.length === 0 ? (
-            <div className="mt-8 rounded-2xl bg-[#f3f2f8] px-4 py-8 text-center text-sm text-muted">Todavía no hay movimientos.</div>
+            <div className="mt-8 rounded-2xl bg-surface-2 px-4 py-8 text-center text-sm text-muted">Todavía no hay movimientos.</div>
           ) : (
             <div className="mt-7 space-y-7">
               {[...groups.entries()].map(([label, entries]) => (
                 <div key={label}>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-muted">{label}</p>
+                  <p className="text-xs font-extrabold text-muted">{label}</p>
                   <div className="mt-3 divide-y divide-line/70">
                     {entries.map(({ movement, createdByName }) => (
                       <article key={movement.id} className="flex gap-3 py-4 first:pt-0 last:pb-0">
-                        <span className={`grid size-11 shrink-0 place-items-center rounded-2xl text-sm font-black ${movement.quantity > 0 ? "bg-accent-soft text-success" : movement.quantity < 0 ? "bg-red-50 text-red-700" : "bg-[#f3f2f8] text-muted"}`}>{formatMovementQuantity(movement.quantity)}</span>
+                        <span className={`grid size-11 shrink-0 place-items-center rounded-2xl text-sm font-black ${movement.quantity > 0 ? "bg-accent-soft text-success" : movement.quantity < 0 ? "bg-red-50 text-red-700" : "bg-surface-2 text-muted"}`}>{formatMovementQuantity(movement.quantity)}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3"><p className="font-extrabold">{movementLabels[movement.type]}</p><time className="shrink-0 text-xs font-semibold text-muted">{new Intl.DateTimeFormat("es-UY", { timeZone: "America/Montevideo", hour: "2-digit", minute: "2-digit" }).format(movement.createdAt)}</time></div>
                           <p className="mt-1 text-sm text-muted">Stock resultante: <strong className="text-ink">{movement.resultingStock}</strong></p>

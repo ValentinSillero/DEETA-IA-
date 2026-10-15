@@ -18,7 +18,7 @@ export default async function SellPage() {
     getOpenCashSessionForUser(session.user.id),
     getBusinessOnboardingStateForUser(session.user.id),
   ]);
-  const header = <div className="mb-6"><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-mint-600">Venta rápida</p><h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Nueva venta</h1><p className="mt-2 text-muted">Buscá, agregá y cobrá.</p></div>;
+  const header = <div className="mb-6"><h1 className="page-title">Nueva venta</h1><p className="page-lead">Buscá, agregá y cobrá.</p></div>;
 
   if (products.length === 0 && onboarding) {
     const manage = canManageCatalog(onboarding.role);

@@ -1,30 +1,47 @@
 import {
-  AlertTriangle,
   ArrowRight,
-  Banknote,
   Bot,
   Camera,
-  ChartNoAxesCombined,
   CircleDollarSign,
-  CreditCard,
   Package,
-  Plus,
   ReceiptText,
   Settings,
+  TriangleAlert,
   WalletCards,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 
+import { GettingStarted } from "@/components/onboarding/getting-started";
 import { getFinancialSummaryForUser } from "@/data/analytics";
 import { getBusinessForUser } from "@/data/businesses";
 import { getOpenCashSessionForUser } from "@/data/cash";
 import { getDashboardDetectionsForUser } from "@/data/intelligent-analytics";
 import { getOnboardingPlanForUser } from "@/data/onboarding";
 import { getProductCountsForUser } from "@/data/products";
-import { GettingStarted } from "@/components/onboarding/getting-started";
 import { buildDeterministicInsights } from "@/lib/ai/insights";
 import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
+
+type Tone = "ok" | "warn" | "neutral";
+const toneDot: Record<Tone, string> = { ok: "bg-success", warn: "bg-orange-500", neutral: "bg-line-strong" };
+
+function AttentionRow({ href, icon: Icon, title, detail, tone, status }: { href: Route; icon: LucideIcon; title: string; detail: string; tone: Tone; status: string }) {
+  return (
+    <Link href={href} className="group flex min-w-0 items-center gap-3.5 border-b border-line px-4 py-3.5 transition-colors last:border-b-0 hover:bg-surface-2 sm:px-5">
+      <Icon className="size-5 shrink-0 text-muted" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold">{title}</p>
+        <p className="truncate text-sm text-muted">{detail}</p>
+      </div>
+      <span className="hidden items-center gap-1.5 text-xs font-semibold text-muted min-[400px]:inline-flex">
+        <span className={`size-2 rounded-full ${toneDot[tone]}`} aria-hidden="true" />{status}
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden="true" />
+    </Link>
+  );
+}
 
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -39,116 +56,108 @@ export default async function DashboardPage() {
   if (!analytics) return null;
   const hasSales = onboarding?.state.signals.hasSales ?? true;
   const hasProducts = onboarding?.state.signals.hasProducts ?? true;
+  const canUseAi = businessContext?.role !== "EMPLOYEE";
 
-  const sales = {
-    totalCents: analytics.current.salesCents,
-    operations: analytics.current.operations,
-    ...analytics.payments,
-  };
+  const today = analytics.current;
+  const payments = analytics.payments;
   const firstName = session.user.name.trim().split(/\s+/)[0];
-  const methods = [
-    { label: "Efectivo", value: sales.cashCents, icon: Banknote },
-    { label: "Transferencias", value: sales.transferCents, icon: ReceiptText },
-    { label: "Tarjetas", value: sales.cardCents, icon: CreditCard },
-  ];
+  const dateLabel = new Intl.DateTimeFormat("es-AR", {
+    weekday: "long", day: "numeric", month: "long",
+    timeZone: businessContext?.business.timezone ?? "America/Argentina/Buenos_Aires",
+  }).format(new Date());
   const aiInsight = buildDeterministicInsights({
     lowStockCount: productCounts.low,
     salesComparisonPercent: analytics.comparisons.sales,
     expensesComparisonPercent: analytics.comparisons.expenses,
   })[0] ?? "Consultá ventas, gastos, margen y stock.";
+  const urgent = hasProducts && detections ? detections.urgentCount : 0;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="section-label">Resumen de hoy</p>
-          <h1 className="mt-1 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Hola, {firstName}</h1>
-          <p className="mt-2 text-sm text-muted">Lo importante de tu negocio, en un solo lugar.</p>
+    <div className="grid gap-6 sm:gap-7">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-muted first-letter:uppercase">{dateLabel}</p>
+          <h1 className="page-title mt-1">Hola, {firstName}</h1>
         </div>
-        <p className="mt-3 text-sm font-bold text-muted sm:mt-0">{sales.operations} {sales.operations === 1 ? "venta registrada" : "ventas registradas"}</p>
       </header>
 
       {onboarding && <GettingStarted plan={onboarding.plan} />}
 
-      <section className="deeta-rule overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="ventas-hoy">
-        <div className="grid gap-6 px-5 py-6 sm:px-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <div>
-            <p id="ventas-hoy" className="text-sm font-bold text-muted">Ventas de hoy</p>
-            <p className="mt-2 break-words text-[clamp(2.5rem,9vw,4.6rem)] font-black leading-none tracking-[-0.055em] text-ink">{formatMoney(sales.totalCents)}</p>
+      {/* Hoy: lo vendido y el resultado, como una hoja de caja del día. */}
+      <section aria-labelledby="hoy-titulo" className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <h2 id="hoy-titulo" className="sr-only">Hoy</h2>
+        <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <div className="px-5 py-5 sm:px-6 sm:py-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-semibold text-muted">Ventas de hoy</p>
+              <p className="text-sm text-muted">{today.operations} {today.operations === 1 ? "venta" : "ventas"}</p>
+            </div>
+            <p className="figure mt-1 break-words text-[clamp(2.4rem,8vw,3.6rem)] leading-none">{formatMoney(today.salesCents)}</p>
+            <div className="ledger mt-4">
+              <div className="ledger-row"><span>Efectivo</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.cashCents)}</span></div>
+              <div className="ledger-row"><span>Transferencias</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.transferCents)}</span></div>
+              <div className="ledger-row"><span>Tarjetas</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.cardCents)}</span></div>
+            </div>
           </div>
-          <Link href="/vender" className="button-primary min-h-13 px-6">
-            <Plus className="size-5" aria-hidden="true" /> Registrar venta
-          </Link>
-        </div>
-        <div className="grid border-t border-line bg-[#f3f2f8] sm:grid-cols-3">
-          {methods.map(({ label, value, icon: Icon }) => (
-            <div key={label} className="flex items-center gap-3 border-b border-line px-5 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-              <Icon className="size-5 shrink-0 text-brand" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-muted">{label}</p>
-                <p className="truncate text-lg font-black text-ink">{formatMoney(value)}</p>
+          <div className="border-t border-line bg-surface-2/60 px-5 py-5 sm:px-6 sm:py-6 lg:border-l lg:border-t-0">
+            <p className="text-sm font-semibold text-muted">Resultado del día</p>
+            <div className="ledger mt-3">
+              <div className="ledger-row"><span>Margen de lo vendido</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(today.grossMarginCents)}</span></div>
+              <div className="ledger-row"><Link href="/gastos" className="underline decoration-line-strong underline-offset-4 hover:text-ink">Gastos</Link><span className="ledger-fill" aria-hidden="true" /><span>−{formatMoney(today.expensesCents)}</span></div>
+              <div className="ledger-total">
+                <span className="font-semibold">Resultado estimado</span>
+                <span className={`figure text-2xl ${today.estimatedResultCents < 0 ? "text-red-700" : ""}`}>{formatMoney(today.estimatedResultCents)}</span>
               </div>
             </div>
-          ))}
+            <Link href="/analisis?periodo=TODAY" className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">Ver análisis del día <ArrowRight className="size-4" aria-hidden="true" /></Link>
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2" aria-label="Resultado y gastos">
-        <Link href="/analisis?periodo=TODAY" className="group flex min-w-0 items-center gap-4 bg-surface p-5 transition-colors hover:bg-mint-50">
-          <span className="icon-box"><ChartNoAxesCombined className="size-5" aria-hidden="true" /></span>
-          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-muted">Resultado estimado</p><p className={`mt-1 truncate text-2xl font-black ${analytics.current.estimatedResultCents < 0 ? "text-red-700" : ""}`}>{formatMoney(analytics.current.estimatedResultCents)}</p></div>
-          <ArrowRight className="size-5 text-muted transition-transform group-hover:translate-x-1" aria-hidden="true" />
-        </Link>
-        <Link href="/gastos" className="group flex min-w-0 items-center gap-4 bg-surface p-5 transition-colors hover:bg-orange-100">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-orange-100 text-orange-500"><WalletCards className="size-5" aria-hidden="true" /></span>
-          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-muted">Gastos de hoy</p><p className="mt-1 truncate text-2xl font-black">{formatMoney(analytics.current.expensesCents)}</p></div>
-          <ArrowRight className="size-5 text-muted transition-transform group-hover:translate-x-1" aria-hidden="true" />
-        </Link>
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-[1.12fr_.88fr]">
-        <section>
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="section-title">Para atender</h2>
-            <Link href="/analisis?periodo=LAST_30_DAYS" className="text-sm font-extrabold text-mint-600 underline decoration-2 underline-offset-4">Ver análisis</Link>
-          </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
+        <section aria-labelledby="atender-titulo">
+          <h2 id="atender-titulo" className="section-title mb-3">Para atender</h2>
           <div className="list-surface">
-            <Link href="/caja" className="list-row group">
-              <span className={openCash ? "icon-box" : "grid size-10 shrink-0 place-items-center rounded-xl bg-orange-100 text-orange-500"}><CircleDollarSign className="size-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1"><p className="font-black">Caja {openCash ? "abierta" : "cerrada"}</p><p className="mt-0.5 text-sm text-muted">{openCash ? `Efectivo esperado: ${formatMoney(openCash.expectedCashCents)}` : "Abrila antes de cobrar en efectivo."}</p></div>
-              <ArrowRight className="size-5 shrink-0 text-muted" aria-hidden="true" />
-            </Link>
-            <Link href="/productos?estado=low" className="list-row">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-orange-100 text-orange-500"><AlertTriangle className="size-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1"><p className="font-black">{productCounts.low} {productCounts.low === 1 ? "producto con poco stock" : "productos con poco stock"}</p><p className="mt-0.5 text-sm text-muted">Revisá lo que conviene reponer.</p></div>
-              <ArrowRight className="size-5 shrink-0 text-muted" aria-hidden="true" />
-            </Link>
-            <Link href="/productos" className="list-row">
-              <span className="icon-box"><Package className="size-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1"><p className="font-black">{productCounts.active} productos activos</p><p className="mt-0.5 text-sm text-muted">Consultá precios, costos y stock.</p></div>
-              <ArrowRight className="size-5 shrink-0 text-muted" aria-hidden="true" />
-            </Link>
+            <AttentionRow href="/caja" icon={CircleDollarSign} title={openCash ? "Caja abierta" : "Caja cerrada"} detail={openCash ? `Efectivo esperado: ${formatMoney(openCash.expectedCashCents)}` : "Abrila antes de cobrar en efectivo."} tone={openCash ? "ok" : "warn"} status={openCash ? "En curso" : "Pendiente"} />
+            {hasProducts ? (
+              <AttentionRow href="/productos?estado=low" icon={TriangleAlert} title={productCounts.low === 0 ? "Stock sin alertas" : `${productCounts.low} ${productCounts.low === 1 ? "producto con poco stock" : "productos con poco stock"}`} detail={urgent > 0 ? `${urgent} ${urgent === 1 ? "necesita" : "necesitan"} reposición pronto.` : "Revisá lo que conviene reponer."} tone={productCounts.low > 0 || urgent > 0 ? "warn" : "ok"} status={productCounts.low > 0 || urgent > 0 ? "Revisar" : "Al día"} />
+            ) : (
+              <AttentionRow href="/productos" icon={Package} title="Sin productos cargados" detail="Cargá tu mercadería para vender y controlar stock." tone="warn" status="Pendiente" />
+            )}
+            <AttentionRow href="/productos" icon={Package} title={`${productCounts.active} ${productCounts.active === 1 ? "producto activo" : "productos activos"}`} detail={detections && detections.immobilizedValueCents > 0 ? `${formatMoney(detections.immobilizedValueCents)} en mercadería con poco movimiento.` : "Precios, costos y stock."} tone="neutral" status="Catálogo" />
           </div>
         </section>
 
-        <section>
-          <h2 className="section-title mb-3">Lectura rápida</h2>
-          <div className="panel deeta-rule h-[calc(100%-2.25rem)]">
-            {!hasProducts ? <><p className="section-label">DEETA detectó</p><p className="mt-2 text-lg font-black">Todavía no hay productos para revisar</p><p className="mt-2 text-sm leading-6 text-muted">Cuando cargues tu mercadería, acá vas a ver qué conviene reponer.</p></> : detections && <><p className="section-label">DEETA detectó</p><p className="mt-2 text-lg font-black">{detections.urgentCount > 0 ? `${detections.urgentCount} ${detections.urgentCount === 1 ? "producto necesita" : "productos necesitan"} atención` : "La reposición está al día"}</p><p className="mt-2 text-sm leading-6 text-muted">{detections.immobilizedValueCents > 0 ? `${formatMoney(detections.immobilizedValueCents)} en mercadería con poco movimiento.` : "No hay stock inmovilizado relevante."}</p></>}
-            {businessContext?.role !== "EMPLOYEE" && (hasSales ? <div className="mt-5 border-t border-line pt-5"><div className="flex gap-3"><Bot className="mt-0.5 size-5 shrink-0 text-mint-600" aria-hidden="true" /><div><p className="font-black">Una pregunta útil</p><p className="mt-1 text-sm leading-6 text-muted">{aiInsight}</p></div></div><Link href="/deeta-ai" className="button-secondary mt-4 w-full">Preguntarle a DEETA</Link></div> : <div className="mt-5 border-t border-line pt-5"><div className="flex gap-3"><Bot className="mt-0.5 size-5 shrink-0 text-mint-600" aria-hidden="true" /><div><p className="font-black">DEETA AI</p><p className="mt-1 text-sm leading-6 text-muted">Cuando registres tus primeras ventas, DEETA AI va a poder ayudarte a analizar tu negocio.</p></div></div></div>)}
+        <section aria-labelledby="atajos-titulo" className="grid gap-6">
+          {canUseAi && (
+            <div className="rounded-2xl border border-line bg-surface p-5">
+              <div className="flex items-start gap-3">
+                <Bot className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="font-semibold">{hasSales ? "DEETA te sugiere" : "DEETA AI"}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted">{hasSales ? aiInsight : "Cuando registres tus primeras ventas, DEETA AI va a poder ayudarte a analizar tu negocio."}</p>
+                  {hasSales && <Link href="/deeta-ai" className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold underline decoration-line-strong underline-offset-4 hover:decoration-ink">Preguntarle a DEETA <ArrowRight className="size-4" aria-hidden="true" /></Link>}
+                </div>
+              </div>
+            </div>
+          )}
+          <div>
+            <h2 id="atajos-titulo" className="section-title mb-3">Atajos</h2>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line">
+              {([
+                { href: "/gastos/nuevo", label: "Anotar gasto", icon: WalletCards },
+                { href: "/scanner", label: "Escanear", icon: Camera },
+                { href: "/ventas", label: "Ver ventas", icon: ReceiptText },
+                { href: "/configuracion/negocio", label: "Mi negocio", icon: Settings },
+              ] as const).map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} className="flex min-h-13 items-center gap-2.5 bg-surface px-4 text-sm font-semibold transition-colors hover:bg-surface-2">
+                  <Icon className="size-[18px] shrink-0 text-muted" aria-hidden="true" />{label}
+                </Link>
+              ))}
+            </div>
           </div>
         </section>
       </div>
-
-      <section>
-        <h2 className="section-title mb-3">Acciones rápidas</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Link href="/gastos/nuevo" className="button-primary"><WalletCards className="size-5" aria-hidden="true" /> Anotar gasto</Link>
-          <Link href="/scanner" className="button-secondary"><Camera className="size-5" aria-hidden="true" /> Escanear</Link>
-          <Link href="/ventas" className="button-secondary"><ReceiptText className="size-5" aria-hidden="true" /> Ver ventas</Link>
-          <Link href="/configuracion/negocio" className="button-secondary"><Settings className="size-5" aria-hidden="true" /> Configuración</Link>
-        </div>
-      </section>
     </div>
   );
 }
