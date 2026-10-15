@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { PRODUCT_IMPORT_FIELDS } from "@/lib/product-imports";
+import { PRODUCT_IMPORT_FIELDS } from "@/lib/product-import-contract";
 
 export const importMappingRequestSchema = z.object({
   mapping: z.record(z.string().regex(/^\d+$/), z.enum(PRODUCT_IMPORT_FIELDS)),

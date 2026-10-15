@@ -16,12 +16,12 @@ import {
   toggleExpenseCategorySchema,
   updateExpenseCategorySchema,
 } from "@/lib/expense-validations";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 
 export type ExpenseFormState = { status: "idle" | "success" | "error"; message?: string; expenseId?: string; unlinkedCash?: boolean; errors?: Record<string, string[]> };
 
 export async function createExpenseAction(_previous: ExpenseFormState, formData: FormData): Promise<ExpenseFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = createExpenseSchema.safeParse({
     description: String(formData.get("description") ?? ""), amountCents: String(formData.get("amountCents") ?? ""),
     categoryId: String(formData.get("categoryId") ?? ""), paymentMethod: String(formData.get("paymentMethod") ?? ""),
@@ -46,7 +46,7 @@ export async function createExpenseAction(_previous: ExpenseFormState, formData:
 export type ExpenseMutationState = { status: "idle" | "success" | "error"; message?: string };
 
 export async function cancelExpenseAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = cancelExpenseSchema.safeParse({ expenseId: String(formData.get("expenseId") ?? ""), reason: String(formData.get("reason") ?? "") });
   if (!parsed.success) return { status: "error", message: "No pudimos validar el gasto." };
   const result = await cancelExpenseForUser(session.user.id, parsed.data.expenseId, parsed.data.reason);
@@ -59,7 +59,7 @@ export async function cancelExpenseAction(_previous: ExpenseMutationState, formD
 }
 
 export async function createExpenseCategoryAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = expenseCategorySchema.safeParse({ name: String(formData.get("name") ?? "") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
   try {
@@ -71,7 +71,7 @@ export async function createExpenseCategoryAction(_previous: ExpenseMutationStat
 }
 
 export async function updateExpenseCategoryAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = updateExpenseCategorySchema.safeParse({ categoryId: String(formData.get("categoryId") ?? ""), name: String(formData.get("name") ?? "") });
   if (!parsed.success) return { status: "error", message: "Revisá el nombre." };
   try {
@@ -83,7 +83,7 @@ export async function updateExpenseCategoryAction(_previous: ExpenseMutationStat
 }
 
 export async function toggleExpenseCategoryAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = toggleExpenseCategorySchema.safeParse({ categoryId: String(formData.get("categoryId") ?? ""), isActive: String(formData.get("isActive")) === "true" });
   if (parsed.success) await toggleExpenseCategoryForUser(session.user.id, parsed.data.categoryId, parsed.data.isActive);
   revalidatePath("/gastos/categorias"); revalidatePath("/gastos/nuevo");

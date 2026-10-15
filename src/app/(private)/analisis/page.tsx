@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { EvolutionChart } from "@/components/analytics/evolution-chart";
-import { getBusinessForUser } from "@/data/businesses";
+import { getAnalyticsContextForUser } from "@/data/analytics-context";
 import { getIntelligentAnalyticsForUser, type IntelligentProduct } from "@/data/intelligent-analytics";
 import { buildAnalysisSummary, comparisonChangeText, comparisonLabel, comparisonReference, formatAnalysisMoney, metricExplanation } from "@/lib/analytics-presentation";
 import { formatMoney } from "@/lib/inventory";
@@ -48,9 +48,9 @@ function ProductRow({ product, value, detail }: { product: IntelligentProduct; v
 function Priority({ value }: { value: IntelligentProduct["reorderPriority"] }) { const styles = value === "URGENT" ? "bg-red-100 text-red-700" : value === "SOON" ? "bg-orange-100 text-orange-700" : "bg-accent-soft text-success"; return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${styles}`}>{value === "URGENT" ? "Urgente" : value === "SOON" ? "Próximamente" : "Bien"}</span>; }
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ periodo?: string; desde?: string; hasta?: string }> }) {
-  const session = await requireSession(); const [params, businessContext] = await Promise.all([searchParams, getBusinessForUser(session.user.id)]);
-  if (!businessContext) redirect("/onboarding");
-  const today = localToday(businessContext.business.timezone); const requested = periods.some((item) => item.value === params.periodo) ? params.periodo as AnalysisPeriod | "CUSTOM" : "CURRENT_MONTH";
+  const session = await requireSession(); const [params, analyticsContext] = await Promise.all([searchParams, getAnalyticsContextForUser(session.user.id)]);
+  if (!analyticsContext) redirect("/onboarding");
+  const today = localToday(analyticsContext.timezone); const requested = periods.some((item) => item.value === params.periodo) ? params.periodo as AnalysisPeriod | "CUSTOM" : "CURRENT_MONTH";
   const period = requested; let customError = false; let ranges;
   if (period === "CUSTOM") {
     if (!params.desde || !params.hasta) ranges = resolveAnalysisPeriod(today, "LAST_30_DAYS");

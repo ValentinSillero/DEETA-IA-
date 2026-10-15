@@ -1,7 +1,7 @@
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return new Response("No autorizado", { status: 401 });
   const headers = [
     "Nombre",

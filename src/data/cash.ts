@@ -42,22 +42,33 @@ function mapCashSession(row: Record<string, unknown>): CashSessionDto {
 
 const cashSessionSelect = `
   select cs.*, b.timezone, opener.name as opened_by_name, closer.name as closed_by_name,
-    (select coalesce(sum(s.total_cents), 0)::bigint from sale s where s.cash_session_id = cs.id and s.business_id = cs.business_id and s.status = 'COMPLETED' and s.payment_method = 'CASH') as cash_sales_cents,
-    (select count(*)::int from sale s where s.cash_session_id = cs.id and s.business_id = cs.business_id and s.status = 'COMPLETED' and s.payment_method = 'CASH') as cash_operations,
-    (select coalesce(sum(e.amount_cents), 0)::bigint from expense e where e.cash_session_id = cs.id and e.business_id = cs.business_id and e.status = 'ACTIVE' and e.payment_method = 'CASH') as cash_expenses_cents,
-    (select count(*)::int from expense e where e.cash_session_id = cs.id and e.business_id = cs.business_id and e.status = 'ACTIVE' and e.payment_method = 'CASH') as cash_expense_operations
+    coalesce(sales.cash_sales_cents, 0)::bigint as cash_sales_cents,
+    coalesce(sales.cash_operations, 0)::int as cash_operations,
+    coalesce(expenses.cash_expenses_cents, 0)::bigint as cash_expenses_cents,
+    coalesce(expenses.cash_expense_operations, 0)::int as cash_expense_operations
   from cash_session cs
   inner join business_member bm on bm.business_id = cs.business_id
   inner join business b on b.id = cs.business_id
   inner join "user" opener on opener.id = cs.opened_by
   left join "user" closer on closer.id = cs.closed_by
+  left join lateral (
+    select coalesce(sum(s.total_cents), 0)::bigint as cash_sales_cents, count(*)::int as cash_operations
+    from sale s
+    where s.cash_session_id = cs.id and s.business_id = cs.business_id
+      and s.status = 'COMPLETED' and s.payment_method = 'CASH'
+  ) sales on true
+  left join lateral (
+    select coalesce(sum(e.amount_cents), 0)::bigint as cash_expenses_cents, count(*)::int as cash_expense_operations
+    from expense e
+    where e.cash_session_id = cs.id and e.business_id = cs.business_id
+      and e.status = 'ACTIVE' and e.payment_method = 'CASH'
+  ) expenses on true
 `;
 
 export async function getOpenCashSessionForUser(userId: string) {
   const sqlClient = getSqlClient();
   const rows = await sqlClient.query(`${cashSessionSelect}
     where bm.user_id = $1 and cs.status = 'OPEN'
-    group by cs.id, b.id, opener.id, closer.id
     limit 1`, [userId]);
   return rows[0] ? mapCashSession(rows[0] as Record<string, unknown>) : null;
 }
@@ -66,7 +77,6 @@ export async function getCashSessionsForUser(userId: string): Promise<CashSessio
   const sqlClient = getSqlClient();
   const rows = await sqlClient.query(`${cashSessionSelect}
     where bm.user_id = $1
-    group by cs.id, b.id, opener.id, closer.id
     order by cs.opened_at desc
     limit 100`, [userId]);
   return rows.map((row) => mapCashSession(row as Record<string, unknown>));
@@ -76,7 +86,6 @@ export async function getCashSessionForUser(userId: string, cashSessionId: strin
   const sqlClient = getSqlClient();
   const rows = await sqlClient.query(`${cashSessionSelect}
     where bm.user_id = $1 and cs.id = $2
-    group by cs.id, b.id, opener.id, closer.id
     limit 1`, [userId, cashSessionId]);
   return rows[0] ? mapCashSession(rows[0] as Record<string, unknown>) : null;
 }

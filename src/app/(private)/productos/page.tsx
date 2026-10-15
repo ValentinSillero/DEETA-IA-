@@ -1,13 +1,12 @@
 import { Archive, ArrowRight, Camera, FileUp, PackagePlus, Plus, SearchX } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { ProductSearch } from "@/components/products/product-search";
 import { StockStatusBadge } from "@/components/products/stock-status-badge";
-import { getBusinessForUser } from "@/data/businesses";
 import {
-  getProductCountsForUser,
-  getProductsForUser,
+  getProductsPageForUser,
   type ProductFilter,
 } from "@/data/products";
 import { formatMoney } from "@/lib/inventory";
@@ -31,15 +30,12 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ buscar?: string; estado?: string }>;
 }) {
-  const session = await requireSession();
-  const params = await searchParams;
+  const [session, params] = await Promise.all([requireSession(), searchParams]);
   const search = params.buscar?.slice(0, 100) ?? "";
   const filter = isProductFilter(params.estado) ? params.estado : "active";
-  const [products, counts, context] = await Promise.all([
-    getProductsForUser(session.user.id, { search, filter }),
-    getProductCountsForUser(session.user.id),
-    getBusinessForUser(session.user.id),
-  ]);
+  const pageData = await getProductsPageForUser(session.user.id, { search, filter });
+  if (!pageData) redirect("/onboarding");
+  const { products, counts, role } = pageData;
   const trulyEmpty = counts.active === 0 && counts.inactive === 0 && filter === "active" && !search;
 
   return (
@@ -50,7 +46,7 @@ export default async function ProductsPage({
           <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Productos</h1>
           <p className="mt-2 text-muted">Todo lo que tenés disponible, en un solo lugar.</p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:flex"><Link href="/productos/ingresar" className="button-secondary shrink-0 sm:col-span-2 xl:col-span-1"><Camera className="size-5" aria-hidden="true" /> Ingresar con cámara</Link>{context?.role !== "EMPLOYEE" && <><Link href="/productos/importar" className="button-secondary shrink-0"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link><Link href="/productos/nuevo" className="button-primary shrink-0"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link></>}</div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:flex"><Link href="/productos/ingresar" className="button-secondary shrink-0 sm:col-span-2 xl:col-span-1"><Camera className="size-5" aria-hidden="true" /> Ingresar con cámara</Link>{role !== "EMPLOYEE" && <><Link href="/productos/importar" className="button-secondary shrink-0"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link><Link href="/productos/nuevo" className="button-primary shrink-0"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link></>}</div>
       </div>
 
       {!trulyEmpty && (
@@ -92,7 +88,7 @@ export default async function ProductsPage({
           <span className="icon-box mx-auto size-14"><PackagePlus className="size-7" aria-hidden="true" /></span>
           <h2 className="mt-5 text-2xl font-black tracking-tight">Empezá cargando tu primer producto</h2>
           <p className="mx-auto mt-3 max-w-md leading-7 text-muted">DEETA va a ayudarte a mantener controlada tu mercadería.</p>
-          {context?.role !== "EMPLOYEE" && <div className="mx-auto mt-7 grid max-w-md gap-2 sm:grid-cols-2"><Link href="/productos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link><Link href="/productos/importar" className="button-secondary"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link></div>}
+          {role !== "EMPLOYEE" && <div className="mx-auto mt-7 grid max-w-md gap-2 sm:grid-cols-2"><Link href="/productos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link><Link href="/productos/importar" className="button-secondary"><FileUp className="size-5" aria-hidden="true" /> Importar productos</Link></div>}
         </section>
       ) : products.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-line bg-surface px-5 py-10 text-center">
@@ -104,7 +100,7 @@ export default async function ProductsPage({
         </section>
       ) : (
         <section className="list-surface mt-6">
-          {products.map(({ product }) => (
+          {products.map((product) => (
             <Link
               key={product.id}
               href={`/productos/${product.id}`}

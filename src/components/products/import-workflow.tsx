@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
-import { PRODUCT_IMPORT_FIELD_LABELS, PRODUCT_IMPORT_FIELDS, type ExistingProductStrategy, type ProductImportField, type ProductImportMapping } from "@/lib/product-imports";
+import { PRODUCT_IMPORT_FIELD_LABELS, PRODUCT_IMPORT_FIELDS, type ExistingProductStrategy, type ProductImportField, type ProductImportMapping } from "@/lib/product-import-contract";
 import { formatMoney } from "@/lib/inventory";
 
 type PreviewRow = {

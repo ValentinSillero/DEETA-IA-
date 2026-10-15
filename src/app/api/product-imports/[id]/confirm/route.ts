@@ -1,10 +1,10 @@
 import { revalidatePath } from "next/cache";
 
 import { confirmProductImportForUser } from "@/data/product-imports";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para continuar." }, { status: 401 });
   const { id } = await params;
   try {

@@ -22,6 +22,11 @@ function createAuth() {
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+        strategy: "jwe",
+      },
     },
     secret: serverEnv.BETTER_AUTH_SECRET,
     baseURL: serverEnv.BETTER_AUTH_URL,

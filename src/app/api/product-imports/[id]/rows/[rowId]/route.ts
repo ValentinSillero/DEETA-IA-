@@ -1,12 +1,12 @@
 import { updateProductImportRowForUser } from "@/data/product-imports";
 import { importRowRequestSchema } from "@/lib/product-import-api";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; rowId: string }> },
 ) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para continuar." }, { status: 401 });
   const parsed = importRowRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: "Revisá los datos de esta fila." }, { status: 400 });

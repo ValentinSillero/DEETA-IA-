@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { getFinancialAnalyticsForUser } from "@/data/analytics";
+import { getFinancialSummaryForUser } from "@/data/analytics";
 import { getBusinessForUser } from "@/data/businesses";
 import { getOpenCashSessionForUser } from "@/data/cash";
 import { getDashboardDetectionsForUser } from "@/data/intelligent-analytics";
@@ -28,7 +28,7 @@ export default async function DashboardPage() {
   const session = await requireSession();
   const [productCounts, analytics, openCash, businessContext, detections] = await Promise.all([
     getProductCountsForUser(session.user.id),
-    getFinancialAnalyticsForUser(session.user.id, "TODAY"),
+    getFinancialSummaryForUser(session.user.id, "TODAY"),
     getOpenCashSessionForUser(session.user.id),
     getBusinessForUser(session.user.id),
     getDashboardDetectionsForUser(session.user.id),

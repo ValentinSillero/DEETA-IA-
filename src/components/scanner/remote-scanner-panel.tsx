@@ -1,7 +1,6 @@
 "use client";
 
 import { CheckCircle2, LoaderCircle, MonitorSmartphone, Smartphone, Unplug, X } from "lucide-react";
-import QRCode from "qrcode";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
@@ -54,6 +53,7 @@ export function RemoteScannerPanel({ onProduct, onPairingChange }: { onProduct: 
     const result = await createPairingAction({ targetCartId });
     if (!result.ok) { setStatus("disconnected"); setNotice(result.message); return; }
     const link = `${window.location.origin}/scanner/conectar?token=${encodeURIComponent(result.token)}`;
+    const QRCode = (await import("qrcode")).default;
     setQr(await QRCode.toDataURL(link, { width: 320, margin: 2, errorCorrectionLevel: "M" }));
     setPairingId(result.pairing.id); onPairingChange(result.pairing.id); setStatus("waiting");
   }

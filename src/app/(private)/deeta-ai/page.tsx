@@ -11,9 +11,12 @@ export const metadata: Metadata = { title: "DEETA AI" };
 
 export default async function DeetaAiPage() {
   const session = await requireSession();
-  const context = await getBusinessForUser(session.user.id);
+  const [context, conversation] = await Promise.all([
+    getBusinessForUser(session.user.id),
+    getLatestAiConversationForUser(session.user.id),
+  ]);
   if (!context) redirect("/onboarding");
   if (context.role === "EMPLOYEE") redirect("/dashboard");
-  const [conversation, configuration] = await Promise.all([getLatestAiConversationForUser(session.user.id), Promise.resolve(getAiConfiguration())]);
+  const configuration = getAiConfiguration();
   return <AiChat enabled={configuration.available} initialConversation={conversation ? { id: conversation.id, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, presentation: message.presentation })) } : null} />;
 }

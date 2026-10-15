@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DragEvent, FormEvent, useRef, useState } from "react";
 
-import { PRODUCT_IMPORT_LIMITS } from "@/lib/product-imports";
+import { PRODUCT_IMPORT_LIMITS } from "@/lib/product-import-contract";
 
 export function ProductImportUpload() {
   const router = useRouter();

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { closeCashForUser, openCashForUser } from "@/data/cash";
 import { closeCashSchema, openCashSchema } from "@/lib/sale-validations";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 
 export type CashFormState = {
   status: "idle" | "success" | "error";
@@ -16,7 +16,7 @@ export async function openCashAction(
   _previousState: CashFormState,
   formData: FormData,
 ): Promise<CashFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = openCashSchema.safeParse({ openingAmountCents: String(formData.get("openingAmountCents") ?? "") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
   try {
@@ -35,7 +35,7 @@ export async function closeCashAction(
   _previousState: CashFormState,
   formData: FormData,
 ): Promise<CashFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = closeCashSchema.safeParse({
     cashSessionId: String(formData.get("cashSessionId") ?? ""),
     declaredCashCents: String(formData.get("declaredCashCents") ?? ""),

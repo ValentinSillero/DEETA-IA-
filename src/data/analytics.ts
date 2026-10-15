@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getAnalyticsContextForUser } from "@/data/analytics-context";
 import { getSqlClient } from "@/db";
 import { calculateFinancialResult, percentageChange, percentageOf } from "@/lib/finance";
 import { resolveAnalysisPeriod, type AnalysisPeriod, type DateRange } from "@/lib/periods";
@@ -22,19 +23,14 @@ export async function getFinancialAnalyticsForUser(
   period: AnalysisPeriod,
   rangesOverride?: { current: DateRange; previous: DateRange },
   businessIdOverride?: string,
+  includeBreakdowns = true,
 ) {
   const sql = getSqlClient();
-  const contextRows = await sql`
-    select b.id as business_id, b.timezone, timezone(b.timezone, now())::date::text as today
-    from business b inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
-    where (${businessIdOverride ?? null}::text is null or b.id = ${businessIdOverride ?? null})
-    limit 1
-  `;
-  const context = contextRows[0];
+  const context = await getAnalyticsContextForUser(userId, businessIdOverride);
   if (!context) return null;
-  const businessId = String(context.business_id);
-  const timezone = String(context.timezone);
-  const ranges = rangesOverride ?? resolveAnalysisPeriod(String(context.today), period);
+  const businessId = context.businessId;
+  const timezone = context.timezone;
+  const ranges = rangesOverride ?? resolveAnalysisPeriod(context.today, period);
 
   const rows = await sql`
     with scoped_sales as (
@@ -80,7 +76,7 @@ export async function getFinancialAnalyticsForUser(
   const current = calculateFinancialResult(currentRaw);
   const previous = calculateFinancialResult(previousRaw);
 
-  const [productRows, categoryRows, mostSoldRows, mostRevenueRows] = await Promise.all([
+  const [productRows, categoryRows, mostSoldRows, mostRevenueRows] = includeBreakdowns ? await Promise.all([
     sql`
       select si.product_id, max(si.product_name_snapshot) as product_name_snapshot,
         sum(si.quantity)::int as units,
@@ -120,7 +116,7 @@ export async function getFinancialAnalyticsForUser(
         and timezone(${timezone}, s.created_at)::date between ${ranges.current.start}::date and ${ranges.current.end}::date
       group by si.product_id order by sales_cents desc, units desc limit 1
     `,
-  ]);
+  ]) : [[], [], [], []];
   const products = productRows.map((item) => mapProduct(item as Record<string, unknown>));
   return {
     timezone, ranges, current, previous,
@@ -148,4 +144,16 @@ export function getFinancialAnalyticsForRangesForUser(
   businessId?: string,
 ) {
   return getFinancialAnalyticsForUser(userId, "TODAY", ranges, businessId);
+}
+
+export function getFinancialSummaryForUser(userId: string, period: AnalysisPeriod) {
+  return getFinancialAnalyticsForUser(userId, period, undefined, undefined, false);
+}
+
+export function getFinancialSummaryForRangesForUser(
+  userId: string,
+  ranges: { current: DateRange; previous: DateRange },
+  businessId?: string,
+) {
+  return getFinancialAnalyticsForUser(userId, "TODAY", ranges, businessId, false);
 }

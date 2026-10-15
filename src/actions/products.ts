@@ -10,7 +10,7 @@ import {
   updateProductForUser,
 } from "@/data/products";
 import { productCreateSchema, productEditSchema, stockMovementSchema } from "@/lib/product-validations";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 
 export type ProductFormState = {
   status: "idle" | "success" | "error";
@@ -46,7 +46,7 @@ export async function createProductAction(
   _previousState: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = productCreateSchema.safeParse(productValues(formData));
 
   if (!parsed.success) {
@@ -80,7 +80,7 @@ export async function updateProductAction(
   _previousState: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const productId = String(formData.get("productId") ?? "");
   const values = productValues(formData);
   const parsed = productEditSchema.safeParse(values);
@@ -116,7 +116,7 @@ export async function stockMovementAction(
   _previousState: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const productId = String(formData.get("productId") ?? "");
   const parsed = stockMovementSchema.safeParse({
     type: String(formData.get("type") ?? ""),
@@ -162,7 +162,7 @@ export async function setProductActiveAction(
   _previousState: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const productId = String(formData.get("productId") ?? "");
   const isActive = formData.get("isActive") === "true";
   if (!productId) return { status: "error", message: "No pudimos encontrar ese producto." };

@@ -1,11 +1,11 @@
 import { getPairingFeedForUser } from "@/data/scanner";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return new Response("No autorizado", { status: 401 });
   const { id } = await params;
   const url = new URL(request.url);

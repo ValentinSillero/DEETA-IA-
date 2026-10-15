@@ -1,6 +1,6 @@
 import { createProductImportForUser } from "@/data/product-imports";
 import { PRODUCT_IMPORT_LIMITS, parseProductImportFile } from "@/lib/product-imports";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ function parseErrorMessage(error: unknown) {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para importar productos." }, { status: 401 });
 
   const formData = await request.formData();

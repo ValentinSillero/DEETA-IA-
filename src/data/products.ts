@@ -71,7 +71,14 @@ export async function getProductsForUser(
           : activeCondition;
 
   return db
-    .select({ product })
+    .select({
+      id: product.id,
+      name: product.name,
+      salePriceCents: product.salePriceCents,
+      currentStock: product.currentStock,
+      minimumStock: product.minimumStock,
+      isActive: product.isActive,
+    })
     .from(product)
     .innerJoin(
       businessMember,
@@ -98,6 +105,101 @@ export async function getProductsForUser(
       asc(product.name),
     )
     .limit(200);
+}
+
+export async function getProductsPageForUser(
+  userId: string,
+  options: { search?: string; filter?: ProductFilter } = {},
+) {
+  const sqlClient = getSqlClient();
+  const search = options.search?.trim() ?? "";
+  const filter = options.filter ?? "active";
+  const rows = await sqlClient`
+    with member as (
+      select business_id, role
+      from business_member
+      where user_id = ${userId}
+      limit 1
+    ), scoped_products as (
+      select p.*
+      from product p
+      inner join member m on m.business_id = p.business_id
+    ), counts as (
+      select
+        count(*) filter (where is_active = true)::int as active,
+        count(*) filter (
+          where is_active = true
+            and current_stock > 0
+            and minimum_stock > 0
+            and current_stock <= minimum_stock
+        )::int as low,
+        count(*) filter (where is_active = true and current_stock = 0)::int as out,
+        count(*) filter (where is_active = false)::int as inactive
+      from scoped_products
+    ), filtered_products as (
+      select
+        id, name, sale_price_cents, current_stock, minimum_stock, is_active,
+        case
+          when current_stock = 0 then 0
+          when minimum_stock > 0 and current_stock <= minimum_stock then 1
+          else 2
+        end as stock_order
+      from scoped_products
+      where (
+        (${filter} = 'active' and is_active = true)
+        or (${filter} = 'low' and is_active = true and current_stock > 0 and minimum_stock > 0 and current_stock <= minimum_stock)
+        or (${filter} = 'out' and is_active = true and current_stock = 0)
+        or (${filter} = 'inactive' and is_active = false)
+      )
+        and (${search} = '' or name ilike ${`%${search}%`} or barcode ilike ${`%${search}%`})
+      order by stock_order, current_stock, name
+      limit 200
+    )
+    select
+      m.role,
+      c.active,
+      c.low,
+      c.out,
+      c.inactive,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', fp.id,
+            'name', fp.name,
+            'salePriceCents', fp.sale_price_cents,
+            'currentStock', fp.current_stock,
+            'minimumStock', fp.minimum_stock,
+            'isActive', fp.is_active
+          ) order by fp.stock_order, fp.current_stock, fp.name
+        ) filter (where fp.id is not null),
+        '[]'::jsonb
+      ) as products
+    from member m
+    cross join counts c
+    left join filtered_products fp on true
+    group by m.role, c.active, c.low, c.out, c.inactive
+  `;
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    role: row.role as "OWNER" | "ADMIN" | "EMPLOYEE",
+    counts: {
+      active: Number(row.active),
+      low: Number(row.low),
+      out: Number(row.out),
+      inactive: Number(row.inactive),
+    },
+    products: (row.products as Array<Record<string, unknown>>).map((item) => ({
+      id: String(item.id),
+      name: String(item.name),
+      salePriceCents: Number(item.salePriceCents),
+      currentStock: Number(item.currentStock),
+      minimumStock: Number(item.minimumStock),
+      isActive: Boolean(item.isActive),
+    })),
+  };
 }
 
 export async function getProductForUser(userId: string, productId: string) {

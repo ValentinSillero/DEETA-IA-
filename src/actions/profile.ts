@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import type { FormState } from "@/actions/business";
 import { updateUserProfile } from "@/data/users";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 import { profileSchema } from "@/lib/validations";
 
 export async function updateProfileAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = profileSchema.safeParse({ name: String(formData.get("name") ?? "") });
 
   if (!parsed.success) {

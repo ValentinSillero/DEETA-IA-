@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, eq, exists, inArray } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
@@ -8,7 +9,7 @@ import { manageableBusinessId } from "@/lib/authorization";
 import type { BusinessInput } from "@/lib/validations";
 import { DEFAULT_EXPENSE_CATEGORIES } from "@/lib/constants";
 
-export async function getBusinessForUser(userId: string) {
+export const getBusinessForUser = cache(async (userId: string) => {
   const db = getDb();
   const [record] = await db
     .select({
@@ -22,7 +23,7 @@ export async function getBusinessForUser(userId: string) {
     .limit(1);
 
   return record ?? null;
-}
+});
 
 export async function createBusinessForUser(userId: string, values: BusinessInput) {
   const sqlClient = getSqlClient();

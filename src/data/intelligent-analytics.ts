@@ -1,6 +1,7 @@
 import "server-only";
 
-import { getFinancialAnalyticsForRangesForUser } from "@/data/analytics";
+import { getFinancialSummaryForRangesForUser } from "@/data/analytics";
+import { getAnalyticsContextForUser } from "@/data/analytics-context";
 import { getSqlClient } from "@/db";
 import { formatMoney } from "@/lib/inventory";
 import {
@@ -17,8 +18,6 @@ import {
   type AutomaticInsight,
 } from "@/lib/intelligent-analytics";
 import type { DateRange } from "@/lib/periods";
-
-type AnalyticsContext = { businessId: string; timezone: string; today: string; historyDays: number };
 
 export type IntelligentProduct = {
   productId: string;
@@ -53,30 +52,6 @@ export type DailyEvolution = {
 };
 
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-
-async function getAnalyticsContext(userId: string, businessId?: string): Promise<AnalyticsContext | null> {
-  const sql = getSqlClient();
-  const rows = await sql`
-    select b.id as business_id, b.timezone, timezone(b.timezone, now())::date::text as today,
-      greatest(1, coalesce(
-        timezone(b.timezone, now())::date - min(timezone(b.timezone, s.created_at)::date),
-        timezone(b.timezone, now())::date - timezone(b.timezone, b.created_at)::date
-      ) + 1)::int as history_days
-    from business b
-    inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
-    left join sale s on s.business_id = b.id and s.status = 'COMPLETED'
-    where (${businessId ?? null}::text is null or b.id = ${businessId ?? null})
-    group by b.id, b.timezone, b.created_at
-    limit 1
-  `;
-  const row = rows[0];
-  return row ? {
-    businessId: String(row.business_id),
-    timezone: String(row.timezone),
-    today: String(row.today),
-    historyDays: Number(row.history_days),
-  } : null;
-}
 
 function marginPercent(salesCents: number, grossMarginCents: number) {
   return salesCents > 0 ? Math.round((grossMarginCents / salesCents) * 10_000) / 100 : null;
@@ -129,14 +104,16 @@ export async function getIntelligentAnalyticsForUser(
   inventoryDays = 30,
   businessId?: string,
 ) {
-  const context = await getAnalyticsContext(userId, businessId);
+  const context = await getAnalyticsContextForUser(userId, businessId);
   if (!context) return null;
   const sql = getSqlClient();
   const periodDays = calendarDays(ranges.current.start, ranges.current.end);
   const safeInventoryDays = [7, 30, 60].includes(inventoryDays) ? inventoryDays : 30;
 
   const [financial, productRows, evolutionRows, weekdayRows, hourRows] = await Promise.all([
-    getFinancialAnalyticsForRangesForUser(userId, ranges, context.businessId),
+    // Same business id argument as above so the cached analytics context is reused
+    // instead of running a second (sequential) context query.
+    getFinancialSummaryForRangesForUser(userId, ranges, businessId),
     sql`
       with product_sales as (
         select si.product_id,
@@ -288,7 +265,7 @@ export async function getIntelligentAnalyticsForUser(
 }
 
 export async function getDashboardDetectionsForUser(userId: string) {
-  const context = await getAnalyticsContext(userId);
+  const context = await getAnalyticsContextForUser(userId);
   if (!context) return null;
   const sql = getSqlClient();
   const rows = await sql`

@@ -1,13 +1,13 @@
 "use client";
 
 import { Banknote, Camera, CreditCard, Minus, PackagePlus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { lookupBarcodeAction } from "@/actions/scanner";
 import { completeSaleAction } from "@/actions/sales";
-import { BarcodeScanner } from "@/components/scanner/barcode-scanner";
 import { RemoteScannerPanel } from "@/components/scanner/remote-scanner-panel";
 import type { ScannerProductDto } from "@/data/scanner";
 import type { SaleProductDto } from "@/data/sales";
@@ -17,6 +17,11 @@ import { parseMoneyToCents } from "@/lib/product-validations";
 
 type CartLine = SaleProductDto & { quantity: number };
 type PaymentMethod = "CASH" | "TRANSFER" | "CARD";
+
+const BarcodeScanner = dynamic(
+  () => import("@/components/scanner/barcode-scanner").then((module) => module.BarcodeScanner),
+  { ssr: false },
+);
 
 export function SaleComposer({ products, hasOpenCash }: { products: SaleProductDto[]; hasOpenCash: boolean }) {
   const router = useRouter();
@@ -153,7 +158,7 @@ export function SaleComposer({ products, hasOpenCash }: { products: SaleProductD
         {error && <p className="notice-error mt-5">{error}</p>}
         <button type="button" onClick={charge} disabled={pending || (paymentMethod === "CASH" && (!hasOpenCash || changeCents === null || changeCents < 0))} className="button-primary mt-6 w-full">{pending ? "Cobrando…" : "Confirmar venta"}</button>
       </div></div>}
-      <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={scanned} />
+      {scannerOpen ? <BarcodeScanner open onClose={() => setScannerOpen(false)} onDetected={scanned} /> : null}
     </>
   );
 }

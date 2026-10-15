@@ -8,7 +8,7 @@ import {
   getBusinessForUser,
   updateBusinessForUser,
 } from "@/data/businesses";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 import { businessSchema } from "@/lib/validations";
 
 export type FormState = {
@@ -32,7 +32,7 @@ export async function createBusinessAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = businessSchema.safeParse(valuesFrom(formData));
 
   if (!parsed.success) {
@@ -63,7 +63,7 @@ export async function updateBusinessAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = businessSchema.safeParse(valuesFrom(formData));
 
   if (!parsed.success) {

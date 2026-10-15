@@ -155,6 +155,60 @@ export async function getExpensesForUser(userId: string, filters: { start: strin
   return rows.map((row) => mapExpense(row as Record<string, unknown>));
 }
 
+export type ExpensePeriodFilter = {
+  period: "TODAY" | "WEEK" | "MONTH" | "CUSTOM";
+  start?: string;
+  end?: string;
+  categoryId?: string;
+};
+
+// Same ranges as the Gastos page computes from the business "today", but
+// resolved inside SQL so the list can load in parallel with the page context
+// instead of waiting for it (one less sequential round trip per navigation).
+// Unknown categories fall back to "all categories", like the page did before.
+export async function getExpensesForPeriodForUser(userId: string, filters: ExpensePeriodFilter): Promise<ExpenseDto[]> {
+  const sql = getSqlClient();
+  const rows = await sql`
+    with ctx as (
+      select b.id as business_id, timezone(b.timezone, now())::date as today
+      from business_member bm inner join business b on b.id = bm.business_id
+      where bm.user_id = ${userId}
+      limit 1
+    ), bounds as (
+      select business_id, today, date_trunc('month', today)::date as month_start,
+        coalesce(${filters.start ?? null}::date, date_trunc('month', today)::date) as custom_start,
+        coalesce(${filters.end ?? null}::date, today) as custom_end
+      from ctx
+    ), period_range as (
+      select business_id,
+        case
+          when ${filters.period} = 'TODAY' then today
+          when ${filters.period} = 'WEEK' then today - 6
+          when ${filters.period} = 'CUSTOM' and custom_start <= custom_end then custom_start
+          else month_start
+        end as start_date,
+        case
+          when ${filters.period} = 'CUSTOM' and custom_start <= custom_end then custom_end
+          else today
+        end as end_date
+      from bounds
+    ), category_filter as (
+      select c.id
+      from expense_category c inner join period_range r on r.business_id = c.business_id
+      where c.id = ${filters.categoryId ?? null}
+    )
+    select e.*, c.name as category_name, creator.name as created_by_name
+    from expense e
+    inner join period_range r on r.business_id = e.business_id
+    inner join expense_category c on c.id = e.category_id and c.business_id = e.business_id
+    inner join "user" creator on creator.id = e.created_by
+    where e.expense_date between r.start_date and r.end_date
+      and (not exists (select 1 from category_filter) or e.category_id in (select id from category_filter))
+    order by e.expense_date desc, e.created_at desc limit 500
+  `;
+  return rows.map((row) => mapExpense(row as Record<string, unknown>));
+}
+
 export async function getExpenseForUser(userId: string, expenseId: string) {
   const sql = getSqlClient();
   const rows = await sql`

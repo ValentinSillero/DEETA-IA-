@@ -1,9 +1,9 @@
 import { aiQuestionSchema } from "@/lib/ai/validation";
 import { askDeetaAi } from "@/lib/ai/service";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ error: "INVALID_REQUEST" }, { status: 400 }); }

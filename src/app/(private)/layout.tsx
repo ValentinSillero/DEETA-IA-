@@ -1,22 +1,22 @@
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
 
 import { AppNavigation } from "@/components/navigation/app-navigation";
+import { SessionCachePrimer } from "@/components/navigation/session-cache-primer";
 import { SignOutButton } from "@/components/navigation/sign-out-button";
 import { DeetaProductMark } from "@/components/ui/logo";
 import { getBusinessForUser } from "@/data/businesses";
 import { requireSession } from "@/lib/session";
 
 export default async function PrivateLayout({ children }: { children: React.ReactNode }) {
-  await connection();
   const session = await requireSession();
   const context = await getBusinessForUser(session.user.id);
   if (!context) redirect("/onboarding");
 
   return (
     <div className="min-h-dvh bg-canvas md:grid md:grid-cols-[264px_minmax(0,1fr)]">
+      <SessionCachePrimer />
       <aside className="hidden border-r border-line bg-surface px-5 py-6 md:fixed md:inset-y-0 md:flex md:w-[264px] md:flex-col">
         <DeetaProductMark />
         <Link href="/configuracion/negocio" className="mt-9 flex items-center gap-3 rounded-xl border border-line bg-canvas p-3 transition-colors hover:border-brand hover:bg-brand-soft">

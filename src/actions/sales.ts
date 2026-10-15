@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { cancelSaleForUser, completeSaleForUser } from "@/data/sales";
 import { cancelSaleSchema, completeSaleSchema } from "@/lib/sale-validations";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 
 export type CompleteSaleActionResult =
   | { ok: true; saleId: string; totalCents: number }
   | { ok: false; message: string; code?: string };
 
 export async function completeSaleAction(input: unknown): Promise<CompleteSaleActionResult> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = completeSaleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Revisá el carrito y el medio de pago." };
 
@@ -43,7 +43,7 @@ export async function cancelSaleAction(
   _previousState: CancelSaleState,
   formData: FormData,
 ): Promise<CancelSaleState> {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = cancelSaleSchema.safeParse({
     saleId: String(formData.get("saleId") ?? ""),
     reason: String(formData.get("reason") ?? ""),

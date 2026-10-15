@@ -13,10 +13,10 @@ import {
 } from "@/data/scanner";
 import { pairingCookieName } from "@/lib/pairing";
 import { connectPairingSchema, createPairingSchema, lookupBarcodeSchema, pairingIdSchema, remoteScanSchema } from "@/lib/scanner-validations";
-import { requireSession } from "@/lib/session";
+import { requireFreshSession } from "@/lib/session";
 
 export async function lookupBarcodeAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = lookupBarcodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, reason: "INVALID" as const };
   const product = await findProductByBarcodeForUser(session.user.id, parsed.data.barcode);
@@ -24,7 +24,7 @@ export async function lookupBarcodeAction(raw: unknown) {
 }
 
 export async function createPairingAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = createPairingSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, message: "No pudimos iniciar la conexión." };
   try {
@@ -37,7 +37,7 @@ export async function createPairingAction(raw: unknown) {
 }
 
 export async function connectPairingAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = connectPairingSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, message: "El código de conexión no es válido." };
   const pairing = await connectPairingForUser(session.user.id, parsed.data.token);
@@ -54,7 +54,7 @@ export async function connectPairingAction(raw: unknown) {
 }
 
 export async function sendRemoteScanAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = remoteScanSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, reason: "INVALID_SCAN" as const };
   const token = (await cookies()).get(pairingCookieName(parsed.data.pairingId))?.value;
@@ -63,13 +63,13 @@ export async function sendRemoteScanAction(raw: unknown) {
 }
 
 export async function revokePcPairingAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = pairingIdSchema.safeParse(raw);
   return parsed.success && await revokePairingForPcUser(session.user.id, parsed.data);
 }
 
 export async function revokeMobilePairingAction(raw: unknown) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = pairingIdSchema.safeParse(raw);
   if (!parsed.success) return false;
   const cookieStore = await cookies();
@@ -88,7 +88,7 @@ export async function revokeMobilePairingAction(raw: unknown) {
 }
 
 export async function validateMobilePairingForUser(pairingId: string) {
-  const session = await requireSession();
+  const session = await requireFreshSession();
   const parsed = pairingIdSchema.safeParse(pairingId);
   if (!parsed.success) return null;
   const token = (await cookies()).get(pairingCookieName(parsed.data))?.value;

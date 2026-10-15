@@ -1,9 +1,9 @@
 import { validateProductImportForUser } from "@/data/product-imports";
 import { importMappingRequestSchema } from "@/lib/product-import-api";
-import { getSession } from "@/lib/session";
+import { getFreshSession } from "@/lib/session";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para continuar." }, { status: 401 });
   const parsed = importMappingRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: "Revisá las correspondencias de las columnas." }, { status: 400 });

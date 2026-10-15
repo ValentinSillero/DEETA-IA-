@@ -25,28 +25,38 @@ export async function getAiAccessForUser(userId: string): Promise<AiAccessContex
 
 export async function getLatestAiConversationForUser(userId: string) {
   const sql = getSqlClient();
-  const conversations = await sql`
-    select c.id, c.title, c.created_at, c.updated_at
-    from ai_conversation c
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
-    where c.user_id = ${userId}
-    order by c.updated_at desc limit 1
+  const rows = await sql`
+    with latest as (
+      select c.id, c.business_id, c.title
+      from ai_conversation c
+      inner join business_member bm
+        on bm.business_id = c.business_id
+       and bm.user_id = ${userId}
+       and bm.role in ('OWNER', 'ADMIN')
+      where c.user_id = ${userId}
+      order by c.updated_at desc
+      limit 1
+    )
+    select latest.id as conversation_id, latest.title,
+      message.id as message_id, message.role, message.content, message.created_at
+    from latest
+    left join lateral (
+      select m.id, m.role, m.content, m.created_at
+      from ai_message m
+      where m.conversation_id = latest.id and m.business_id = latest.business_id
+      order by m.created_at desc
+      limit 30
+    ) message on true
+    order by message.created_at asc
   `;
-  const conversation = conversations[0];
+  const conversation = rows[0];
   if (!conversation) return null;
-  const messages = await sql`
-    select m.id, m.role, m.content, m.created_at
-    from ai_message m
-    inner join ai_conversation c on c.id = m.conversation_id and c.business_id = m.business_id
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
-    where m.conversation_id = ${String(conversation.id)} and c.user_id = ${userId}
-    order by m.created_at desc limit 30
-  `;
   return {
-    id: String(conversation.id), title: String(conversation.title),
-    messages: messages.reverse().map((message) => {
+    id: String(conversation.conversation_id), title: String(conversation.title),
+    messages: rows.flatMap((message) => {
+      if (!message.message_id) return [];
       const decoded = decodeAiMessageContent(String(message.content));
-      return { id: String(message.id), role: message.role as "USER" | "ASSISTANT", content: decoded.content, presentation: decoded.presentation, createdAt: new Date(String(message.created_at)) };
+      return [{ id: String(message.message_id), role: message.role as "USER" | "ASSISTANT", content: decoded.content, presentation: decoded.presentation, createdAt: new Date(String(message.created_at)) }];
     }),
   };
 }
