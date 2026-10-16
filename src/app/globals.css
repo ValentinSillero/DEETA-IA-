@@ -237,6 +237,8 @@ button, a, select { -webkit-tap-highlight-color: transparent; }
 }
 @keyframes skeleton-slide { to { transform: translateX(100%); } }
 
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
