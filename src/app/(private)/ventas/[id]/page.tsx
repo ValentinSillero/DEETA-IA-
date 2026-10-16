@@ -8,11 +8,16 @@ import { getSaleForUser } from "@/data/sales";
 import { formatMoney } from "@/lib/inventory";
 import { PAYMENT_METHOD_LABELS, SALE_PAYMENT_LABELS, saleDisplayNumber } from "@/lib/sales";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Detalle de venta" };
 
 export default async function SaleDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ creada?: string }> }) {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "SALE_VIEW")) return <NoAccess section="Ventas" />;
+  const membership = await getActiveMembership(session.user.id);
   const { id } = await params;
   const [sale, query] = await Promise.all([getSaleForUser(session.user.id, id), searchParams]);
   if (!sale) notFound();
@@ -78,7 +83,7 @@ export default async function SaleDetailPage({ params, searchParams }: { params:
           <p className="mt-1">{sale.cancelledAt ? new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Montevideo" }).format(sale.cancelledAt) : ""}{sale.cancelledByName ? ` por ${sale.cancelledByName}` : ""}</p>
           {sale.cancellationReason && <p className="mt-1">Motivo: {sale.cancellationReason}</p>}
         </div>
-      ) : <CancelSaleForm saleId={sale.id} />}
+      ) : can(membership, "SALE_CANCEL") ? <CancelSaleForm saleId={sale.id} /> : null}
     </div>
   );
 }

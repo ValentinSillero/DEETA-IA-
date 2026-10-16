@@ -1,6 +1,7 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -20,7 +21,7 @@ function friendlyAuthError(message?: string) {
   return "No pudimos completar la operación. Intentá nuevamente.";
 }
 
-export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+export function AuthForm({ mode, next = null }: { mode: "sign-in" | "sign-up"; next?: string | null }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +50,8 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       return;
     }
 
-    router.push(isSignUp ? "/onboarding" : "/dashboard");
+    // Si venía de una invitación vuelve a aceptarla; si no, al flujo normal.
+    router.push((next ?? (isSignUp ? "/onboarding" : "/dashboard")) as Route);
     router.refresh();
   }
 
@@ -84,7 +86,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       <p className="text-center text-sm text-muted">
         {isSignUp ? "¿Ya tenés una cuenta?" : "¿Todavía no tenés cuenta?"}{" "}
         <Link
-          href={isSignUp ? "/iniciar-sesion" : "/crear-cuenta"}
+          href={`${isSignUp ? "/iniciar-sesion" : "/crear-cuenta"}${next ? `?siguiente=${encodeURIComponent(next)}` : ""}` as Route}
           className="font-bold text-ink underline decoration-mint-400 decoration-2 underline-offset-4"
         >
           {isSignUp ? "Iniciar sesión" : "Crear cuenta"}

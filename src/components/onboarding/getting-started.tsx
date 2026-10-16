@@ -7,7 +7,7 @@ import { setOnboardingPreferenceAction } from "@/actions/onboarding";
 import type { OnboardingExtra, OnboardingPlan, OnboardingStep, OnboardingStepId } from "@/lib/onboarding";
 
 const stepIcons: Record<OnboardingStepId, LucideIcon> = { products: Package, cash: CircleDollarSign, sale: ReceiptText };
-const extraIcons: Record<OnboardingExtra["id"], LucideIcon> = { expenses: WalletCards, ai: Bot, customers: UsersRound };
+const extraIcons: Record<OnboardingExtra["id"], LucideIcon> = { expenses: WalletCards, ai: Bot, customers: UsersRound, team: UsersRound };
 
 function PreferenceButton({ preference, label, children, className }: { preference: "minimized" | "dismissed" | ""; label: string; children: React.ReactNode; className: string }) {
   return (

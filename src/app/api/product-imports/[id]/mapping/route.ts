@@ -1,10 +1,13 @@
 import { validateProductImportForUser } from "@/data/product-imports";
 import { importMappingRequestSchema } from "@/lib/product-import-api";
 import { getFreshSession } from "@/lib/session";
+import { forbiddenResponse } from "@/lib/action-guard";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para continuar." }, { status: 401 });
+  const forbidden = await forbiddenResponse(session.user.id, "PRODUCT_IMPORT");
+  if (forbidden) return forbidden;
   const parsed = importMappingRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: "Revisá las correspondencias de las columnas." }, { status: 400 });
   const { id } = await params;

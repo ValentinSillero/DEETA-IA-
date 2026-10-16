@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { closeCashForUser, openCashForUser } from "@/data/cash";
 import { closeCashSchema, openCashSchema } from "@/lib/sale-validations";
 import { requireFreshSession } from "@/lib/session";
+import { permissionDenied } from "@/lib/action-guard";
 
 export type CashFormState = {
   status: "idle" | "success" | "error";
@@ -17,6 +18,8 @@ export async function openCashAction(
   formData: FormData,
 ): Promise<CashFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CASH_OPEN");
+  if (denied) return { status: "error", message: denied };
   const parsed = openCashSchema.safeParse({ openingAmountCents: String(formData.get("openingAmountCents") ?? "") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
   try {
@@ -36,6 +39,8 @@ export async function closeCashAction(
   formData: FormData,
 ): Promise<CashFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CASH_CLOSE");
+  if (denied) return { status: "error", message: denied };
   const parsed = closeCashSchema.safeParse({
     cashSessionId: String(formData.get("cashSessionId") ?? ""),
     declaredCashCents: String(formData.get("declaredCashCents") ?? ""),

@@ -13,6 +13,8 @@ import { buildAnalysisSummary, comparisonChangeText, comparisonLabel, comparison
 import { formatMoney } from "@/lib/inventory";
 import { resolveAnalysisPeriod, resolveCustomPeriod, type AnalysisPeriod } from "@/lib/periods";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Análisis" };
 const periods: Array<{ value: AnalysisPeriod | "CUSTOM"; label: string }> = [
@@ -52,6 +54,8 @@ function Priority({ value }: { value: IntelligentProduct["reorderPriority"] }) {
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ periodo?: string; desde?: string; hasta?: string }> }) {
   const session = await requireSession(); const [params, analyticsContext, onboarding] = await Promise.all([searchParams, getAnalyticsContextForUser(session.user.id), getBusinessOnboardingStateForUser(session.user.id)]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PROFITABILITY_VIEW")) return <NoAccess section="Análisis" />;
   if (!analyticsContext) redirect("/onboarding");
   // Sin ninguna venta ni gasto histórico no mostramos cifras en $0 como si fueran un análisis real.
   if (onboarding && !onboarding.signals.hasSales && !onboarding.signals.hasExpenses) {

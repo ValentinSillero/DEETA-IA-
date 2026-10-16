@@ -5,12 +5,15 @@ import { redirect } from "next/navigation";
 
 import {
   createProductForUser,
+  getProductForUser,
   createStockMovementForUser,
   setProductActiveForUser,
   updateProductForUser,
 } from "@/data/products";
 import { productCreateSchema, productEditSchema, stockMovementSchema } from "@/lib/product-validations";
 import { requireFreshSession } from "@/lib/session";
+import { permissionDenied } from "@/lib/action-guard";
+import { recordAudit } from "@/data/team";
 
 export type ProductFormState = {
   status: "idle" | "success" | "error";
@@ -47,6 +50,8 @@ export async function createProductAction(
   formData: FormData,
 ): Promise<ProductFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "PRODUCT_CREATE");
+  if (denied) return { status: "error", message: denied };
   const parsed = productCreateSchema.safeParse(productValues(formData));
 
   if (!parsed.success) {
@@ -81,6 +86,8 @@ export async function updateProductAction(
   formData: FormData,
 ): Promise<ProductFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "PRODUCT_EDIT");
+  if (denied) return { status: "error", message: denied };
   const productId = String(formData.get("productId") ?? "");
   const values = productValues(formData);
   const parsed = productEditSchema.safeParse(values);
@@ -93,9 +100,21 @@ export async function updateProductAction(
     };
   }
 
+  // Cambiar precios es un permiso aparte de editar la descripción del producto.
+  const current = await getProductForUser(session.user.id, productId);
+  if (!current) return { status: "error", message: "No pudimos encontrar ese producto." };
+  const pricesChanged = current.product.salePriceCents !== parsed.data.salePriceCents || current.product.costPriceCents !== parsed.data.costPriceCents;
+  if (pricesChanged) {
+    const priceDenied = await permissionDenied(session.user.id, "PRODUCT_PRICE_EDIT");
+    if (priceDenied) return { status: "error", message: "Tu rol no permite cambiar precios." };
+  }
+
   try {
     const updated = await updateProductForUser(session.user.id, productId, parsed.data);
     if (!updated) return { status: "error", message: "No pudimos encontrar ese producto." };
+    if (pricesChanged) {
+      await recordAudit({ businessId: current.product.businessId, actorUserId: session.user.id, action: "PRODUCT_PRICE_CHANGE", entityType: "product", entityId: productId, metadata: { previousSaleCents: current.product.salePriceCents, saleCents: parsed.data.salePriceCents, previousCostCents: current.product.costPriceCents, costCents: parsed.data.costPriceCents } });
+    }
   } catch (error) {
     console.error("No se pudo actualizar el producto", error);
     return {
@@ -117,6 +136,8 @@ export async function stockMovementAction(
   formData: FormData,
 ): Promise<ProductFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "STOCK_ADJUST");
+  if (denied) return { status: "error", message: denied };
   const productId = String(formData.get("productId") ?? "");
   const parsed = stockMovementSchema.safeParse({
     type: String(formData.get("type") ?? ""),
@@ -163,6 +184,8 @@ export async function setProductActiveAction(
   formData: FormData,
 ): Promise<ProductFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "PRODUCT_EDIT");
+  if (denied) return { status: "error", message: denied };
   const productId = String(formData.get("productId") ?? "");
   const isActive = formData.get("isActive") === "true";
   if (!productId) return { status: "error", message: "No pudimos encontrar ese producto." };

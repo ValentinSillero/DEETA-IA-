@@ -9,11 +9,15 @@ import { getBusinessOnboardingStateForUser } from "@/data/onboarding";
 import { getSaleProductsForUser } from "@/data/sales";
 import { canManageCatalog } from "@/lib/onboarding";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Nueva venta" };
 
 export default async function SellPage({ searchParams }: { searchParams: Promise<{ cliente?: string }> }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "SALE_CREATE")) return <NoAccess section="Vender" />;
   // El cliente se valida contra el negocio de la sesión; un id ajeno se ignora.
   const customerId = params.cliente && /^[0-9a-f-]{36}$/i.test(params.cliente) ? params.cliente : null;
   const [products, openCash, onboarding, initialCustomer] = await Promise.all([

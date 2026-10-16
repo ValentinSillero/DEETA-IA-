@@ -27,7 +27,7 @@ const getAnalyticsContextCached = cache(async (
         timezone(b.timezone, now())::date - timezone(b.timezone, b.created_at)::date
       ) + 1)::int as history_days
     from business b
-    inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = b.id and bm.user_id = ${userId}
     left join sale s on s.business_id = b.id and s.status = 'COMPLETED'
     where (${businessId}::text is null or b.id = ${businessId})
     group by b.id, b.timezone, b.created_at

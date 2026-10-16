@@ -6,14 +6,17 @@ import { redirect } from "next/navigation";
 import { ProductImportUpload } from "@/components/products/import-upload";
 import { getBusinessForUser } from "@/data/businesses";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Importar productos" };
 
 export default async function ImportProductsPage() {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PRODUCT_IMPORT")) return <NoAccess section="la importación de productos" />;
   const context = await getBusinessForUser(session.user.id);
   if (!context) redirect("/onboarding");
-  if (context.role === "EMPLOYEE") redirect("/productos");
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/productos" className="inline-flex items-center gap-2 text-sm font-bold text-muted hover:text-ink"><ArrowLeft className="size-4" aria-hidden="true" /> Volver a productos</Link>

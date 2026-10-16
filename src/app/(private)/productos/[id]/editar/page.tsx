@@ -7,11 +7,15 @@ import { updateProductAction } from "@/actions/products";
 import { ProductForm } from "@/components/products/product-form";
 import { getProductForUser } from "@/data/products";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Editar producto" };
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PRODUCT_EDIT")) return <NoAccess section="editar productos" />;
   const { id } = await params;
   const record = await getProductForUser(session.user.id, id);
   if (!record) notFound();

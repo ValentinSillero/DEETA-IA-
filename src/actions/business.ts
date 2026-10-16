@@ -10,6 +10,8 @@ import {
 } from "@/data/businesses";
 import { requireFreshSession } from "@/lib/session";
 import { businessSchema } from "@/lib/validations";
+import { permissionDenied } from "@/lib/action-guard";
+import { recordAudit } from "@/data/team";
 
 export type FormState = {
   status: "idle" | "success" | "error";
@@ -64,6 +66,8 @@ export async function updateBusinessAction(
   formData: FormData,
 ): Promise<FormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "BUSINESS_SETTINGS");
+  if (denied) return { status: "error", message: denied };
   const parsed = businessSchema.safeParse(valuesFrom(formData));
 
   if (!parsed.success) {
@@ -82,6 +86,7 @@ export async function updateBusinessAction(
         message: "No tenés permiso para modificar este negocio.",
       };
     }
+    await recordAudit({ businessId: updated.id, actorUserId: session.user.id, action: "BUSINESS_SETTINGS_UPDATE", entityType: "business", entityId: updated.id, metadata: { name: updated.name } });
     revalidatePath("/dashboard");
     revalidatePath("/configuracion/negocio");
     return { status: "success", message: "Los cambios se guardaron correctamente." };

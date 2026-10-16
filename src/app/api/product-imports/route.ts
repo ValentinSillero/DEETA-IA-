@@ -1,6 +1,7 @@
 import { createProductImportForUser } from "@/data/product-imports";
 import { PRODUCT_IMPORT_LIMITS, parseProductImportFile } from "@/lib/product-imports";
 import { getFreshSession } from "@/lib/session";
+import { forbiddenResponse } from "@/lib/action-guard";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ function parseErrorMessage(error: unknown) {
 export async function POST(request: Request) {
   const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para importar productos." }, { status: 401 });
+  const forbidden = await forbiddenResponse(session.user.id, "PRODUCT_IMPORT");
+  if (forbidden) return forbidden;
 
   const formData = await request.formData();
   const file = formData.get("file");

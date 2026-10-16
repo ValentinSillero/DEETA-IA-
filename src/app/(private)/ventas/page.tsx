@@ -7,6 +7,8 @@ import { getSalesForUser } from "@/data/sales";
 import { formatMoney } from "@/lib/inventory";
 import { PAYMENT_METHOD_LABELS, saleDisplayNumber } from "@/lib/sales";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Ventas" };
 
@@ -16,6 +18,8 @@ function formatDate(date: Date) {
 
 export default async function SalesPage() {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "SALE_VIEW")) return <NoAccess section="Ventas" />;
   const sales = await getSalesForUser(session.user.id);
   return (
     <div>

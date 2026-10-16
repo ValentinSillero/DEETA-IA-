@@ -1,4 +1,5 @@
 import type { MemberRole } from "@/db/schema";
+import { hasPermission } from "@/lib/permissions";
 
 // Señales reales del negocio. Todo el progreso se deriva de estos datos:
 // no se guarda ningún "paso completado" manualmente.
@@ -30,7 +31,7 @@ export type OnboardingStep = {
 };
 
 export type OnboardingExtra = {
-  id: "expenses" | "ai" | "customers";
+  id: "expenses" | "ai" | "customers" | "team";
   title: string;
   description: string;
   action: OnboardingAction;
@@ -54,11 +55,11 @@ export const ESTABLISHED_AFTER_DAYS = 14;
 export const COMPLETED_VISIBLE_DAYS = 3;
 
 export function canManageCatalog(role: MemberRole) {
-  return role === "OWNER" || role === "ADMIN";
+  return hasPermission(role, "PRODUCT_CREATE");
 }
 
 export function canUseAi(role: MemberRole) {
-  return role !== "EMPLOYEE";
+  return hasPermission(role, "PROFITABILITY_VIEW");
 }
 
 function latest(dates: Array<Date | null>) {
@@ -133,7 +134,7 @@ export function buildOnboardingPlan(input: {
   const total = steps.length;
 
   const extras: OnboardingExtra[] = [];
-  if (!signals.hasExpenses) {
+  if (!signals.hasExpenses && hasPermission(role, "EXPENSE_CREATE")) {
     extras.push({
       id: "expenses",
       title: "Registrá tus gastos",
@@ -141,7 +142,15 @@ export function buildOnboardingPlan(input: {
       action: { label: "Anotar gasto", href: "/gastos/nuevo", variant: "secondary" },
     });
   }
-  if (signals.hasSales) {
+  if (signals.hasSales && hasPermission(role, "TEAM_INVITE")) {
+    extras.push({
+      id: "team",
+      title: "¿Trabajás con otras personas?",
+      description: "Podés invitarlas y elegir qué puede hacer cada una.",
+      action: { label: "Invitar al equipo", href: "/configuracion/equipo", variant: "secondary" },
+    });
+  }
+  if (signals.hasSales && hasPermission(role, "CUSTOMER_VIEW")) {
     extras.push({
       id: "customers",
       title: "¿Vendés fiado?",

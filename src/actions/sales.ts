@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cancelSaleForUser, completeSaleForUser } from "@/data/sales";
 import { cancelSaleSchema, completeSaleSchema } from "@/lib/sale-validations";
 import { requireFreshSession } from "@/lib/session";
+import { permissionDenied } from "@/lib/action-guard";
 
 export type CompleteSaleActionResult =
   | { ok: true; saleId: string; totalCents: number }
@@ -12,6 +13,8 @@ export type CompleteSaleActionResult =
 
 export async function completeSaleAction(input: unknown): Promise<CompleteSaleActionResult> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "SALE_CREATE");
+  if (denied) return { ok: false, message: denied, code: "FORBIDDEN" };
   const parsed = completeSaleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues.find((issue) => issue.path[0] === "customerId")?.message ?? "Revisá el carrito y el medio de pago." };
 
@@ -47,6 +50,8 @@ export async function cancelSaleAction(
   formData: FormData,
 ): Promise<CancelSaleState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "SALE_CANCEL");
+  if (denied) return { status: "error", message: denied };
   const parsed = cancelSaleSchema.safeParse({
     saleId: String(formData.get("saleId") ?? ""),
     reason: String(formData.get("reason") ?? ""),

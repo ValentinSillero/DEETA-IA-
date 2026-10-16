@@ -7,6 +7,8 @@ import { CashDifference, CashStatement } from "@/components/cash/cash-statement"
 import { getCashSessionsForUser } from "@/data/cash";
 import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Caja" };
 
@@ -21,6 +23,9 @@ const steps = [
 
 export default async function CashPage() {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "CASH_OPEN")) return <NoAccess section="Caja" />;
+  const membership = await getActiveMembership(session.user.id);
   const history = await getCashSessionsForUser(session.user.id);
   const openCash = history.find((cash) => cash.status === "OPEN") ?? null;
 
@@ -39,14 +44,14 @@ export default async function CashPage() {
 
       {openCash ? (
         <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-start" aria-label="Caja abierta">
-          <div className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          {can(membership, "CASH_CLOSE") && <div className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="section-title">Hoja de caja</h2>
               <p className="text-sm text-muted">{openCash.cashOperations} {openCash.cashOperations === 1 ? "venta" : "ventas"} en efectivo</p>
             </div>
             <div className="mt-3"><CashStatement cash={openCash} size="large" /></div>
-          </div>
-          <CloseCashForm id={openCash.id} expectedCashCents={openCash.expectedCashCents} />
+          </div>}
+          {can(membership, "CASH_CLOSE") ? <CloseCashForm id={openCash.id} expectedCashCents={openCash.expectedCashCents} /> : <p className="rounded-2xl border border-line bg-surface p-5 text-sm leading-6 text-muted">La caja la cierra el encargado o el dueño del negocio.</p>}
         </section>
       ) : (
         <section className="mt-6 grid gap-5 lg:grid-cols-2 lg:items-start" aria-label="Abrir caja">
@@ -71,7 +76,7 @@ export default async function CashPage() {
         </section>
       )}
 
-      <section className="mt-9" aria-labelledby="historial-cajas">
+      {can(membership, "CASH_VIEW_HISTORY") && <section className="mt-9" aria-labelledby="historial-cajas">
         <h2 id="historial-cajas" className="section-title">Historial</h2>
         {history.length === 0 ? (
           <div className="mt-3 rounded-2xl border border-dashed border-line-strong px-5 py-6 text-center">
@@ -101,7 +106,7 @@ export default async function CashPage() {
             </ul>
           </div>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

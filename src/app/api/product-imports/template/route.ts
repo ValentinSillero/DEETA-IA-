@@ -1,8 +1,11 @@
 import { getFreshSession } from "@/lib/session";
+import { forbiddenResponse } from "@/lib/action-guard";
 
 export async function GET() {
   const session = await getFreshSession();
   if (!session) return new Response("No autorizado", { status: 401 });
+  const forbidden = await forbiddenResponse(session.user.id, "PRODUCT_IMPORT");
+  if (forbidden) return forbidden;
   const headers = [
     "Nombre",
     "Código de barras",

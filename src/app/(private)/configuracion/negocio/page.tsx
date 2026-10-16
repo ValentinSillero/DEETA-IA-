@@ -5,11 +5,15 @@ import { updateBusinessAction } from "@/actions/business";
 import { BusinessForm } from "@/components/forms/business-form";
 import { getBusinessForUser } from "@/data/businesses";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Mi negocio" };
 
 export default async function BusinessSettingsPage() {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "BUSINESS_SETTINGS")) return <NoAccess section="la configuración del negocio" />;
   const context = await getBusinessForUser(session.user.id);
   if (!context) redirect("/onboarding");
 

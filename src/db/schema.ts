@@ -9,6 +9,7 @@ import {
   index,
   pgEnum,
   pgTable,
+  pgView,
   jsonb,
   text,
   timestamp,
@@ -93,7 +94,9 @@ export const businessCategory = pgEnum("business_category", [
   "OTHER",
 ]);
 
-export const memberRole = pgEnum("member_role", ["OWNER", "ADMIN", "EMPLOYEE"]);
+// EMPLOYEE es el rol anterior al equipo: se conserva y se trata como MANAGER.
+export const memberRole = pgEnum("member_role", ["OWNER", "ADMIN", "EMPLOYEE", "MANAGER", "SELLER"]);
+export const invitationStatus = pgEnum("invitation_status", ["PENDING", "ACCEPTED", "CANCELLED"]);
 
 export const business = pgTable("business", {
   id: text("id").primaryKey(),
@@ -119,12 +122,79 @@ export const businessMember = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     role: memberRole("role").default("EMPLOYEE").notNull(),
+    // Negocio activo de la persona: exactamente una membresía por usuario.
+    isCurrent: boolean("is_current").default(true).notNull(),
     ...auditColumns,
   },
   (table) => [
-    uniqueIndex("business_member_user_unique").on(table.userId),
+    uniqueIndex("business_member_user_current_unique").on(table.userId).where(sql`${table.isCurrent}`),
     uniqueIndex("business_member_business_user_unique").on(table.businessId, table.userId),
+    index("business_member_user_idx").on(table.userId),
     index("business_member_business_idx").on(table.businessId),
+  ],
+);
+
+// Membresía del negocio activo. Todas las lecturas acotadas por usuario usan
+// esta vista para no mezclar negocios cuando una persona pertenece a varios.
+export const activeMembership = pgView("active_membership", {
+  id: text("id").notNull(),
+  businessId: text("business_id").notNull(),
+  userId: text("user_id").notNull(),
+  role: memberRole("role").notNull(),
+  isCurrent: boolean("is_current").notNull(),
+}).existing();
+
+export const businessInvitation = pgTable(
+  "business_invitation",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => business.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: memberRole("role").notNull(),
+    // Solo se guarda el hash SHA-256 del token; el token viaja únicamente en el enlace.
+    tokenHash: text("token_hash").notNull(),
+    status: invitationStatus("status").default("PENDING").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    acceptedBy: text("accepted_by").references(() => user.id, { onDelete: "restrict" }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (table) => [
+    uniqueIndex("business_invitation_token_hash_unique").on(table.tokenHash),
+    uniqueIndex("business_invitation_pending_email_unique")
+      .on(table.businessId, table.email)
+      .where(sql`${table.status} = 'PENDING'`),
+    index("business_invitation_business_status_idx").on(table.businessId, table.status),
+    check("business_invitation_email_lowercase", sql`${table.email} = lower(${table.email})`),
+    check("business_invitation_role_assignable", sql`${table.role} <> 'EMPLOYEE'`),
+  ],
+);
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => business.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    // Solo datos no sensibles: nunca contraseñas, tokens ni secretos.
+    metadata: jsonb("metadata").$type<Record<string, string | number | boolean | null>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("audit_log_business_created_idx").on(table.businessId, table.createdAt),
+    index("audit_log_business_entity_idx").on(table.businessId, table.entityType, table.entityId),
   ],
 );
 
@@ -349,6 +419,7 @@ export const customer = pgTable(
     document: text("document"),
     notes: text("notes"),
     isActive: boolean("is_active").default(true).notNull(),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "restrict" }),
     // Saldo materializado para listar rápido. La fuente de verdad son los
     // movimientos: cada operación lo actualiza en la misma sentencia.
     balanceCents: bigint("balance_cents", { mode: "number" }).default(0).notNull(),
@@ -801,6 +872,7 @@ export const authSchema = { user, session, account, verification };
 
 export type Business = typeof business.$inferSelect;
 export type MemberRole = (typeof memberRole.enumValues)[number];
+export type BusinessInvitation = typeof businessInvitation.$inferSelect;
 export type Product = typeof product.$inferSelect;
 export type StockMovement = typeof stockMovement.$inferSelect;
 export type StockMovementType = (typeof stockMovementType.enumValues)[number];

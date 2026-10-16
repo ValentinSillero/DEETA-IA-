@@ -11,6 +11,7 @@ import {
   Settings,
   ShoppingCart,
   UserRound,
+  Users,
   UsersRound,
   WalletCards,
   X,
@@ -21,35 +22,42 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type NavItem = { href: Route; label: string; icon: LucideIcon; aiOnly?: boolean };
+import type { Permission } from "@/lib/permissions";
+
+// Cada destino declara el permiso que necesita. El servidor vuelve a validar
+// en cada página: ocultar un enlace es solo comodidad.
+type NavItem = { href: Route; label: string; icon: LucideIcon; permission?: Permission };
 
 const home: NavItem = { href: "/dashboard", label: "Inicio", icon: House };
-const sell: NavItem = { href: "/vender", label: "Vender", icon: ShoppingCart };
-const products: NavItem = { href: "/productos", label: "Productos", icon: Package };
-const sales: NavItem = { href: "/ventas", label: "Ventas", icon: ReceiptText };
-const cash: NavItem = { href: "/caja", label: "Caja", icon: CircleDollarSign };
-const customers: NavItem = { href: "/clientes", label: "Clientes", icon: UsersRound };
-const expenses: NavItem = { href: "/gastos", label: "Gastos", icon: WalletCards };
-const analytics: NavItem = { href: "/analisis", label: "Análisis", icon: ChartNoAxesCombined };
-const ai: NavItem = { href: "/deeta-ai", label: "DEETA AI", icon: Bot, aiOnly: true };
+const sell: NavItem = { href: "/vender", label: "Vender", icon: ShoppingCart, permission: "SALE_CREATE" };
+const products: NavItem = { href: "/productos", label: "Productos", icon: Package, permission: "PRODUCT_VIEW" };
+const sales: NavItem = { href: "/ventas", label: "Ventas", icon: ReceiptText, permission: "SALE_VIEW" };
+const cash: NavItem = { href: "/caja", label: "Caja", icon: CircleDollarSign, permission: "CASH_OPEN" };
+const customers: NavItem = { href: "/clientes", label: "Clientes", icon: UsersRound, permission: "CUSTOMER_VIEW" };
+const expenses: NavItem = { href: "/gastos", label: "Gastos", icon: WalletCards, permission: "EXPENSE_VIEW" };
+const analytics: NavItem = { href: "/analisis", label: "Análisis", icon: ChartNoAxesCombined, permission: "PROFITABILITY_VIEW" };
+const ai: NavItem = { href: "/deeta-ai", label: "DEETA AI", icon: Bot, permission: "AI_USE" };
+const team: NavItem = { href: "/configuracion/equipo", label: "Equipo", icon: Users, permission: "TEAM_VIEW" };
+const settings: NavItem = { href: "/configuracion/negocio", label: "Mi negocio", icon: Settings, permission: "BUSINESS_SETTINGS" };
 
 // Escritorio: módulos agrupados por cómo se usan durante el día.
 const groups: Array<{ label: string | null; items: NavItem[] }> = [
   { label: null, items: [home] },
   { label: "Día a día", items: [sales, customers, cash, expenses] },
   { label: "Mercadería", items: [products] },
-  { label: "Mi negocio", items: [analytics, ai] },
+  { label: "Mi negocio", items: [analytics, ai, team] },
 ];
 
 // Celular: cuatro destinos directos, Vender al centro y el resto en "Más".
-const mobilePrimary: NavItem[] = [home, products, sell, cash];
+const mobilePrimary: NavItem[] = [home, products, sell, cash, customers];
 const mobileMore: Array<NavItem> = [
   sales,
   customers,
   expenses,
   analytics,
   ai,
-  { href: "/configuracion/negocio", label: "Mi negocio", icon: Settings },
+  team,
+  settings,
   { href: "/configuracion/perfil", label: "Mi cuenta", icon: UserRound },
 ];
 
@@ -57,8 +65,8 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 }
 
-function visible(items: NavItem[], canUseAi: boolean) {
-  return items.filter((item) => !item.aiOnly || canUseAi);
+function visible(items: NavItem[], permissions: readonly Permission[]) {
+  return items.filter((item) => !item.permission || permissions.includes(item.permission));
 }
 
 // Cada ruta del panel es dinámica y comparte (private)/loading.tsx, así que el
@@ -81,17 +89,19 @@ function SideLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function SidebarNavigation({ canUseAi }: { canUseAi: boolean }) {
+export function SidebarNavigation({ permissions }: { permissions: readonly Permission[] }) {
   const pathname = usePathname();
   const sellIntent = useIntentPrefetch();
   const selling = isActive(pathname, sell.href);
   return (
     <nav aria-label="Navegación principal" className="grid gap-5">
-      <Link href={sell.href} className={`button-brand min-h-11 w-full justify-start px-3.5 ${selling ? "ring-2 ring-brand/25 ring-offset-2" : ""}`} aria-current={selling ? "page" : undefined} {...sellIntent}>
-        <ShoppingCart className="size-[18px]" aria-hidden="true" /> Nueva venta
-      </Link>
+      {permissions.includes("SALE_CREATE") && (
+        <Link href={sell.href} className={`button-brand min-h-11 w-full justify-start px-3.5 ${selling ? "ring-2 ring-brand/25 ring-offset-2" : ""}`} aria-current={selling ? "page" : undefined} {...sellIntent}>
+          <ShoppingCart className="size-[18px]" aria-hidden="true" /> Nueva venta
+        </Link>
+      )}
       {groups.map((group) => {
-        const items = visible(group.items, canUseAi);
+        const items = visible(group.items, permissions);
         if (items.length === 0) return null;
         return (
           <div key={group.label ?? "inicio"} className="grid gap-0.5">
@@ -116,10 +126,14 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function MobileNavigation({ canUseAi }: { canUseAi: boolean }) {
+export function MobileNavigation({ permissions }: { permissions: readonly Permission[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const more = visible(mobileMore, canUseAi);
+  // Los cuatro primeros destinos permitidos van en la barra; el resto, en "Más".
+  const allowedPrimary = visible(mobilePrimary, permissions).filter((item) => item !== sell);
+  const bar = [...allowedPrimary.slice(0, 2), ...(permissions.includes("SALE_CREATE") ? [sell] : []), ...allowedPrimary.slice(2, 3)];
+  const more = [...allowedPrimary.slice(3), ...visible(mobileMore, permissions)]
+    .filter((item, index, list) => !bar.includes(item) && list.findIndex((other) => other.href === item.href) === index);
   const moreActive = more.some((item) => isActive(pathname, item.href));
 
   useEffect(() => {
@@ -131,8 +145,8 @@ export function MobileNavigation({ canUseAi }: { canUseAi: boolean }) {
 
   return (
     <>
-      <nav className="app-navigation" aria-label="Navegación principal">
-        {mobilePrimary.map((item) => <TabLink key={item.href} item={item} active={isActive(pathname, item.href)} />)}
+      <nav className="app-navigation" aria-label="Navegación principal" style={{ gridTemplateColumns: `repeat(${bar.length + 1}, minmax(0, 1fr))` }}>
+        {bar.map((item) => <TabLink key={item.href} item={item} active={isActive(pathname, item.href)} />)}
         <button type="button" className="nav-link" data-active={moreActive || undefined} aria-expanded={moreOpen} aria-controls="mobile-more" onClick={() => setMoreOpen(true)}>
           <Ellipsis className="size-5" aria-hidden="true" />
           <span>Más</span>

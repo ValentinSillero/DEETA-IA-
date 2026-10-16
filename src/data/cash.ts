@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSqlClient } from "@/db";
+import { rolesWith } from "@/lib/permissions";
 
 export type CashSessionDto = {
   id: string;
@@ -53,7 +54,7 @@ const cashSessionSelect = `
     coalesce(customer_payments.cash_customer_payments_cents, 0)::bigint as cash_customer_payments_cents,
     coalesce(customer_payments.cash_customer_payment_operations, 0)::int as cash_customer_payment_operations
   from cash_session cs
-  inner join business_member bm on bm.business_id = cs.business_id
+  inner join active_membership bm on bm.business_id = cs.business_id
   inner join business b on b.id = cs.business_id
   inner join "user" opener on opener.id = cs.opened_by
   left join "user" closer on closer.id = cs.closed_by
@@ -119,8 +120,8 @@ export async function openCashForUser(userId: string, openingAmountCents: number
   const id = crypto.randomUUID();
   const rows = await sqlClient`
     with member as (
-      select business_id from business_member
-      where user_id = ${userId} and role in ('OWNER', 'ADMIN', 'EMPLOYEE') limit 1
+      select business_id from active_membership
+      where user_id = ${userId} and role = any(${rolesWith("CASH_OPEN")}::member_role[]) limit 1
     ), created as (
       insert into cash_session (
         id, business_id, opened_by, opening_amount_cents, expected_cash_cents, status
@@ -135,7 +136,7 @@ export async function openCashForUser(userId: string, openingAmountCents: number
     ) select id from created
   `;
   if (rows[0]) return { ok: true, id: String(rows[0].id) };
-  const membership = await sqlClient`select 1 from business_member where user_id = ${userId} limit 1`;
+  const membership = await sqlClient`select 1 from active_membership where user_id = ${userId} limit 1`;
   return membership[0] ? { ok: false, reason: "ALREADY_OPEN" } : { ok: false, reason: "NO_BUSINESS" };
 }
 
@@ -153,10 +154,10 @@ export async function closeCashForUser(
     with target as (
       select cs.id, cs.expected_cash_cents
       from cash_session cs
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = cs.business_id
        and bm.user_id = ${userId}
-       and bm.role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+       and bm.role = any(${rolesWith("CASH_CLOSE")}::member_role[])
       where cs.id = ${cashSessionId} and cs.status = 'OPEN'
       for update of cs
     ), closed as (

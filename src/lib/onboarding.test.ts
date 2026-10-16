@@ -21,7 +21,7 @@ const empty: OnboardingSignals = {
   firstSaleAt: null,
 };
 
-function plan(signals: Partial<OnboardingSignals>, options: { role?: "OWNER" | "ADMIN" | "EMPLOYEE"; preference?: "minimized" | "dismissed" | null } = {}) {
+function plan(signals: Partial<OnboardingSignals>, options: { role?: "OWNER" | "ADMIN" | "EMPLOYEE" | "MANAGER" | "SELLER"; preference?: "minimized" | "dismissed" | null } = {}) {
   return buildOnboardingPlan({ signals: { ...empty, ...signals }, role: options.role ?? "OWNER", preference: options.preference ?? null, now });
 }
 
@@ -86,13 +86,13 @@ describe("onboarding derivado de datos reales", () => {
     expect(plan({}, { preference: "dismissed" }).mode).toBe("minimized");
   });
 
-  it("permisos: un empleado no ve acciones de catálogo que no puede realizar", () => {
-    const result = plan({}, { role: "EMPLOYEE" });
+  it("permisos: un vendedor no ve acciones de catálogo que no puede realizar", () => {
+    const result = plan({}, { role: "SELLER" });
     expect(result.steps[0]).toMatchObject({ status: "blocked", actions: [] });
     expect(result.steps[0].description).toMatch(/Pedile/);
     expect(result.steps[1]).toMatchObject({ status: "next" });
     expect(result.steps[1].actions[0].href).toBe("/caja");
-    const withSales = plan({ hasProducts: true, hasStock: true, hasSales: true, firstSaleAt: daysAgo(0) }, { role: "EMPLOYEE" });
+    const withSales = plan({ hasProducts: true, hasStock: true, hasSales: true, firstSaleAt: daysAgo(0) }, { role: "SELLER" });
     expect(withSales.extras.map((extra) => extra.id)).not.toContain("ai");
   });
 

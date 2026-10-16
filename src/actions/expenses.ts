@@ -17,11 +17,14 @@ import {
   updateExpenseCategorySchema,
 } from "@/lib/expense-validations";
 import { requireFreshSession } from "@/lib/session";
+import { permissionDenied } from "@/lib/action-guard";
 
 export type ExpenseFormState = { status: "idle" | "success" | "error"; message?: string; expenseId?: string; unlinkedCash?: boolean; errors?: Record<string, string[]> };
 
 export async function createExpenseAction(_previous: ExpenseFormState, formData: FormData): Promise<ExpenseFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "EXPENSE_CREATE");
+  if (denied) return { status: "error", message: denied };
   const parsed = createExpenseSchema.safeParse({
     description: String(formData.get("description") ?? ""), amountCents: String(formData.get("amountCents") ?? ""),
     categoryId: String(formData.get("categoryId") ?? ""), paymentMethod: String(formData.get("paymentMethod") ?? ""),
@@ -47,6 +50,8 @@ export type ExpenseMutationState = { status: "idle" | "success" | "error"; messa
 
 export async function cancelExpenseAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "EXPENSE_CANCEL");
+  if (denied) return { status: "error", message: denied };
   const parsed = cancelExpenseSchema.safeParse({ expenseId: String(formData.get("expenseId") ?? ""), reason: String(formData.get("reason") ?? "") });
   if (!parsed.success) return { status: "error", message: "No pudimos validar el gasto." };
   const result = await cancelExpenseForUser(session.user.id, parsed.data.expenseId, parsed.data.reason);
@@ -60,6 +65,8 @@ export async function cancelExpenseAction(_previous: ExpenseMutationState, formD
 
 export async function createExpenseCategoryAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "EXPENSE_CATEGORY_MANAGE");
+  if (denied) return { status: "error", message: denied };
   const parsed = expenseCategorySchema.safeParse({ name: String(formData.get("name") ?? "") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
   try {
@@ -72,6 +79,8 @@ export async function createExpenseCategoryAction(_previous: ExpenseMutationStat
 
 export async function updateExpenseCategoryAction(_previous: ExpenseMutationState, formData: FormData): Promise<ExpenseMutationState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "EXPENSE_CATEGORY_MANAGE");
+  if (denied) return { status: "error", message: denied };
   const parsed = updateExpenseCategorySchema.safeParse({ categoryId: String(formData.get("categoryId") ?? ""), name: String(formData.get("name") ?? "") });
   if (!parsed.success) return { status: "error", message: "Revisá el nombre." };
   try {
@@ -84,6 +93,8 @@ export async function updateExpenseCategoryAction(_previous: ExpenseMutationStat
 
 export async function toggleExpenseCategoryAction(formData: FormData) {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "EXPENSE_CATEGORY_MANAGE");
+  if (denied) return;
   const parsed = toggleExpenseCategorySchema.safeParse({ categoryId: String(formData.get("categoryId") ?? ""), isActive: String(formData.get("isActive")) === "true" });
   if (parsed.success) await toggleExpenseCategoryForUser(session.user.id, parsed.data.categoryId, parsed.data.isActive);
   revalidatePath("/gastos/categorias"); revalidatePath("/gastos/nuevo");

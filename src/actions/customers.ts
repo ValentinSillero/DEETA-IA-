@@ -19,6 +19,7 @@ import {
   quickCustomerSchema,
 } from "@/lib/customer-validations";
 import { requireFreshSession } from "@/lib/session";
+import { permissionDenied } from "@/lib/action-guard";
 
 export type CustomerFormState = {
   status: "idle" | "success" | "error";
@@ -44,6 +45,8 @@ function revalidateCustomer(customerId?: string) {
 
 export async function createCustomerAction(_state: CustomerFormState, formData: FormData): Promise<CustomerFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_EDIT");
+  if (denied) return { status: "error", message: denied };
   const parsed = customerSchema.safeParse(customerValues(formData));
   if (!parsed.success) return { status: "error", message: "Revisá los datos marcados.", errors: parsed.error.flatten().fieldErrors };
   let customerId: string | null = null;
@@ -59,6 +62,8 @@ export async function createCustomerAction(_state: CustomerFormState, formData: 
 
 export async function updateCustomerAction(_state: CustomerFormState, formData: FormData): Promise<CustomerFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_EDIT");
+  if (denied) return { status: "error", message: denied };
   const customerId = String(formData.get("customerId") ?? "");
   const parsed = customerSchema.safeParse(customerValues(formData));
   if (!parsed.success) return { status: "error", message: "Revisá los datos marcados.", errors: parsed.error.flatten().fieldErrors };
@@ -70,6 +75,8 @@ export async function updateCustomerAction(_state: CustomerFormState, formData: 
 
 export async function setCustomerActiveAction(_state: CustomerFormState, formData: FormData): Promise<CustomerFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_DEACTIVATE");
+  if (denied) return { status: "error", message: denied };
   const customerId = String(formData.get("customerId") ?? "");
   const active = formData.get("active") === "true";
   const result = await setCustomerActiveForUser(session.user.id, customerId, active);
@@ -89,6 +96,8 @@ export type CustomerPaymentState = CustomerFormState & { balanceCents?: number }
 
 export async function registerCustomerPaymentAction(_state: CustomerPaymentState, formData: FormData): Promise<CustomerPaymentState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_PAYMENT");
+  if (denied) return { status: "error", message: denied };
   const parsed = customerPaymentSchema.safeParse({
     customerId: String(formData.get("customerId") ?? ""),
     amountCents: String(formData.get("amount") ?? ""),
@@ -119,6 +128,8 @@ export async function registerCustomerPaymentAction(_state: CustomerPaymentState
 
 export async function adjustCustomerBalanceAction(_state: CustomerFormState, formData: FormData): Promise<CustomerFormState> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_ADJUSTMENT");
+  if (denied) return { status: "error", message: denied };
   const parsed = customerAdjustmentSchema.safeParse({
     customerId: String(formData.get("customerId") ?? ""),
     direction: String(formData.get("direction") ?? ""),
@@ -143,6 +154,8 @@ export async function adjustCustomerBalanceAction(_state: CustomerFormState, for
 
 export async function searchCustomersAction(query: string): Promise<CustomerListItem[]> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_VIEW");
+  if (denied) return [];
   return searchCustomersForUser(session.user.id, String(query ?? "").slice(0, 80));
 }
 
@@ -150,6 +163,8 @@ export type QuickCustomerResult = { ok: true; customer: CustomerListItem } | { o
 
 export async function quickCreateCustomerAction(input: { name: string; phone: string }): Promise<QuickCustomerResult> {
   const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "CUSTOMER_EDIT");
+  if (denied) return { ok: false, message: denied };
   const parsed = quickCustomerSchema.safeParse({ name: String(input?.name ?? ""), phone: String(input?.phone ?? "") });
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Revisá los datos del cliente." };
   const customer = await createCustomerForUser(session.user.id, parsed.data).catch(() => null);

@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { getSqlClient } from "@/db";
 import type { CustomerMovementType, MemberRole, PaymentMethod } from "@/db/schema";
+import { hasPermission, rolesWith } from "@/lib/permissions";
 import type {
   CustomerAdjustmentInput,
   CustomerInput,
@@ -11,7 +12,7 @@ import type {
   QuickCustomerInput,
 } from "@/lib/customer-validations";
 
-// Todas las consultas parten de business_member: el negocio sale siempre de la
+// Todas las consultas parten de active_membership: el negocio sale siempre de la
 // membresía autenticada y nunca de un identificador enviado por el navegador.
 
 export type CustomerListItem = {
@@ -40,7 +41,7 @@ const membershipCached = cache(async (userId: string) => {
   const sql = getSqlClient();
   const rows = await sql`
     select bm.business_id, bm.role, b.timezone
-    from business_member bm inner join business b on b.id = bm.business_id
+    from active_membership bm inner join business b on b.id = bm.business_id
     where bm.user_id = ${userId}
     limit 1
   `;
@@ -106,7 +107,7 @@ export async function getCustomerDebtSummaryForUser(userId: string) {
   const rows = await sql`
     select coalesce(sum(c.balance_cents), 0)::bigint as pending_cents, count(*) filter (where c.balance_cents > 0)::int as debtors
     from customer c
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId}
     where c.balance_cents > 0
   `;
   return { pendingCents: Number(rows[0]?.pending_cents ?? 0), debtors: Number(rows[0]?.debtors ?? 0) };
@@ -215,10 +216,10 @@ export async function createCustomerForUser(userId: string, input: CustomerInput
   const id = crypto.randomUUID();
   const values = { email: null, document: null, notes: null, ...input };
   const rows = await sql`
-    insert into customer (id, business_id, name, phone, email, document, notes)
-    select ${id}, bm.business_id, ${values.name}, ${values.phone}, ${values.email}, ${values.document}, ${values.notes}
-    from business_member bm
-    where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+    insert into customer (id, business_id, name, phone, email, document, notes, created_by)
+    select ${id}, bm.business_id, ${values.name}, ${values.phone}, ${values.email}, ${values.document}, ${values.notes}, ${userId}
+    from active_membership bm
+    where bm.user_id = ${userId} and bm.role = any(${rolesWith("CUSTOMER_EDIT")}::member_role[])
     limit 1
     returning id, name, phone, balance_cents, is_active, last_movement_at
   `;
@@ -231,11 +232,11 @@ export async function updateCustomerForUser(userId: string, customerId: string, 
     update customer c
     set name = ${input.name}, phone = ${input.phone}, email = ${input.email},
         document = ${input.document}, notes = ${input.notes}, updated_at = now()
-    from business_member bm
+    from active_membership bm
     where c.id = ${customerId}
       and bm.business_id = c.business_id
       and bm.user_id = ${userId}
-      and bm.role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+      and bm.role = any(${rolesWith("CUSTOMER_EDIT")}::member_role[])
     returning c.id
   `;
   return rows.length > 0;
@@ -246,17 +247,17 @@ export type SetCustomerActiveResult = { ok: true } | { ok: false; reason: "NOT_F
 export async function setCustomerActiveForUser(userId: string, customerId: string, active: boolean): Promise<SetCustomerActiveResult> {
   const context = await membershipCached(userId);
   if (!context) return { ok: false, reason: "NOT_FOUND" };
-  if (context.role !== "OWNER" && context.role !== "ADMIN") return { ok: false, reason: "FORBIDDEN" };
+  if (!hasPermission(context.role, "CUSTOMER_DEACTIVATE")) return { ok: false, reason: "FORBIDDEN" };
   const sql = getSqlClient();
   // Un cliente con deuda no puede desaparecer de la gestión.
   const rows = await sql`
     update customer c
     set is_active = ${active}, updated_at = now()
-    from business_member bm
+    from active_membership bm
     where c.id = ${customerId}
       and bm.business_id = c.business_id
       and bm.user_id = ${userId}
-      and bm.role in ('OWNER', 'ADMIN')
+      and bm.role = any(${rolesWith("CUSTOMER_DEACTIVATE")}::member_role[])
       and (${active} or c.balance_cents = 0)
     returning c.id
   `;
@@ -279,8 +280,8 @@ export async function registerCustomerPaymentForUser(userId: string, input: Cust
   // modifican el efectivo esperado.
   const rows = await sql`
     with member as (
-      select business_id from business_member
-      where user_id = ${userId} and role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+      select business_id from active_membership
+      where user_id = ${userId} and role = any(${rolesWith("CUSTOMER_PAYMENT")}::member_role[])
       limit 1
     ), target as (
       select c.id, c.business_id, c.balance_cents
@@ -338,7 +339,7 @@ export async function registerCustomerPaymentForUser(userId: string, input: Cust
   const duplicate = await sql`
     select m.id, c.balance_cents
     from customer_account_movement m
-    inner join business_member bm on bm.business_id = m.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = m.business_id and bm.user_id = ${userId}
     inner join customer c on c.id = m.customer_id and c.business_id = m.business_id
     where m.idempotency_key = ${input.idempotencyKey}
     limit 1
@@ -357,7 +358,7 @@ async function getActiveCustomerOrAnyForUser(userId: string, customerId: string)
   const rows = await sql`
     select c.id, c.name, c.phone, c.balance_cents, c.is_active, c.last_movement_at
     from customer c
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId}
     where c.id = ${customerId}
     limit 1
   `;
@@ -371,13 +372,13 @@ export type CustomerAdjustmentResult =
 export async function adjustCustomerBalanceForUser(userId: string, input: CustomerAdjustmentInput): Promise<CustomerAdjustmentResult> {
   const context = await membershipCached(userId);
   if (!context) return { ok: false, reason: "NOT_FOUND" };
-  if (context.role !== "OWNER" && context.role !== "ADMIN") return { ok: false, reason: "FORBIDDEN" };
+  if (!hasPermission(context.role, "CUSTOMER_ADJUSTMENT")) return { ok: false, reason: "FORBIDDEN" };
   const sql = getSqlClient();
   const signed = input.direction === "INCREASE" ? input.amountCents : -input.amountCents;
   const rows = await sql`
     with member as (
-      select business_id from business_member
-      where user_id = ${userId} and role in ('OWNER', 'ADMIN')
+      select business_id from active_membership
+      where user_id = ${userId} and role = any(${rolesWith("CUSTOMER_ADJUSTMENT")}::member_role[])
       limit 1
     ), target as (
       select c.id, c.business_id, c.balance_cents

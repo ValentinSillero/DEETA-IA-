@@ -3,6 +3,9 @@ import "server-only";
 import { z } from "zod";
 
 import { getSqlClient } from "@/db";
+import type { MemberRole } from "@/db/schema";
+import { getActiveMembership } from "@/data/membership";
+import { hasPermission, type Permission } from "@/lib/permissions";
 import { getFinancialAnalyticsForRangesForUser } from "@/data/analytics";
 import { getIntelligentAnalyticsForUser, type IntelligentProduct } from "@/data/intelligent-analytics";
 import { getCashSessionsForUser, getOpenCashSessionForUser } from "@/data/cash";
@@ -11,6 +14,7 @@ import { aiPeriodSchema, inventoryAnalysisSchema, productPerformanceSchema, prod
 import { calculateFinancialResult, percentageChange, percentageOf } from "@/lib/finance";
 import { formatMoney } from "@/lib/inventory";
 import { resolveAiPeriod, type AiPeriodSelection } from "@/lib/periods";
+import { rolesWith } from "@/lib/permissions";
 
 const periodProperties = {
   kind: { type: "string", enum: ["TODAY", "YESTERDAY", "CURRENT_WEEK", "PREVIOUS_WEEK", "LAST_7_DAYS", "LAST_30_DAYS", "CURRENT_MONTH", "PREVIOUS_MONTH", "CURRENT_YEAR", "SPECIFIC_MONTH", "CUSTOM_RANGE"] },
@@ -42,8 +46,8 @@ async function getAiContextForUser(userId: string): Promise<AiContext | null> {
   const sql = getSqlClient();
   const rows = await sql`
     select b.id as business_id, b.timezone, timezone(b.timezone, now())::date::text as today
-    from business b inner join business_member bm on bm.business_id = b.id
-    where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN') limit 1
+    from business b inner join active_membership bm on bm.business_id = b.id
+    where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[]) limit 1
   `;
   const row = rows[0];
   return row ? { businessId: String(row.business_id), timezone: String(row.timezone), today: String(row.today) } : null;
@@ -226,14 +230,14 @@ async function getStockAttention(
   const sql = getSqlClient();
   const productCountRows = await sql`
     select count(*)::int as count
-    from product p inner join business_member bm on bm.business_id = p.business_id
-    where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN') and p.is_active = true
+    from product p inner join active_membership bm on bm.business_id = p.business_id
+    where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[]) and p.is_active = true
   `;
   const rows = await sql`
     with context as (
       select b.id as business_id, b.timezone, timezone(b.timezone, now())::date as today
-      from business b inner join business_member bm on bm.business_id = b.id
-      where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN') limit 1
+      from business b inner join active_membership bm on bm.business_id = b.id
+      where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[]) limit 1
     ), recent_sales as (
       select si.product_id, sum(si.quantity)::int as units
       from sale_item si inner join sale s on s.id = si.sale_id and s.business_id = si.business_id
@@ -278,8 +282,8 @@ async function getSlowMovingProducts(userId: string, rawArguments: unknown) {
   const rows = await sql`
     with context as (
       select b.id as business_id, b.timezone, timezone(b.timezone, now())::date as today
-      from business b inner join business_member bm on bm.business_id = b.id
-      where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN') limit 1
+      from business b inner join active_membership bm on bm.business_id = b.id
+      where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[]) limit 1
     )
     select p.name, p.current_stock,
       coalesce(sum(si.quantity) filter (where timezone(c.timezone, s.created_at)::date between c.today - (${days}::int - 1) and c.today and s.status = 'COMPLETED'), 0)::int as units,
@@ -658,8 +662,54 @@ async function getCustomerPayments(userId: string, rawArguments: unknown) {
   };
 }
 
+// Cada herramienta exige un permiso de la matriz central. La IA no puede
+// usarse para ver lo que la persona no podría ver en la interfaz.
+export const AI_TOOL_PERMISSIONS: Record<string, Permission> = {
+  get_period_summary: "PROFITABILITY_VIEW",
+  get_business_period_analysis: "PROFITABILITY_VIEW",
+  get_top_product_analysis: "PROFITABILITY_VIEW",
+  getProductProfitability: "PROFITABILITY_VIEW",
+  getAutomaticInsights: "PROFITABILITY_VIEW",
+  get_product_sales_ranking: "ANALYTICS_VIEW",
+  get_sales_patterns: "ANALYTICS_VIEW",
+  getSalesTrends: "ANALYTICS_VIEW",
+  getStrongestDays: "ANALYTICS_VIEW",
+  getStrongestHours: "ANALYTICS_VIEW",
+  get_product_leaders: "ANALYTICS_VIEW",
+  get_inventory_analysis: "STOCK_VIEW",
+  get_stock_attention: "STOCK_VIEW",
+  get_slow_moving_products: "STOCK_VIEW",
+  getInventoryTurnover: "STOCK_VIEW",
+  getSlowMovingProducts: "STOCK_VIEW",
+  getStockCoverage: "STOCK_VIEW",
+  getReorderCandidates: "STOCK_VIEW",
+  get_product_performance: "STOCK_VIEW",
+  get_expense_breakdown: "EXPENSE_VIEW",
+  get_cash_summary: "CASH_VIEW_HISTORY",
+  get_customer_balances: "CUSTOMER_VIEW",
+  get_customer_account: "CUSTOMER_VIEW",
+  get_customer_payments: "CUSTOMER_VIEW",
+};
+
+export function aiToolAllowed(role: MemberRole, name: string) {
+  const permission = AI_TOOL_PERMISSIONS[name];
+  return Boolean(permission && hasPermission(role, permission));
+}
+
+export function aiToolsForRole(role: MemberRole) {
+  return DEETA_AI_TOOLS.filter((tool) => aiToolAllowed(role, tool.name));
+}
+
 export function createAiToolExecutor(userId: string) {
   return async (name: string, rawArguments: unknown) => {
+    // Se valida en el servidor en cada llamada, con el rol vigente.
+    const membership = await getActiveMembership(userId);
+    if (!membership || !hasPermission(membership.role, "AI_USE") || !aiToolAllowed(membership.role, name)) throw new Error("AI_TOOL_NOT_ALLOWED");
+    if (name === "get_product_performance" && !hasPermission(membership.role, "PROFITABILITY_VIEW")) {
+      const data = await getProductPerformance(userId, rawArguments);
+      // Sin permiso de rentabilidad se devuelve solo stock y unidades.
+      return { ...data, matches: data.matches.map((match) => ({ name: match.name, currentStock: match.currentStock, minimumStock: match.minimumStock, units: match.units, lastSale: match.lastSale })) };
+    }
     if (name === "get_period_summary") return getPeriodSummary(userId, rawArguments);
     if (name === "get_business_period_analysis") return getBusinessPeriodAnalysis(userId, rawArguments);
     if (name === "get_top_product_analysis") return getTopProductAnalysis(userId, rawArguments);

@@ -10,17 +10,21 @@ import { customerMovementLabel, relativeDaysLabel } from "@/lib/customers";
 import { formatMoney } from "@/lib/inventory";
 import { saleDisplayNumber } from "@/lib/sales";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Cliente" };
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [session, { id }] = await Promise.all([requireSession(), params]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "CUSTOMER_VIEW")) return <NoAccess section="Clientes" />;
+  const membership = await getActiveMembership(session.user.id);
   const [customer, openCash] = await Promise.all([
     getCustomerForUser(session.user.id, id),
     getOpenCashSessionForUser(session.user.id),
   ]);
   if (!customer) notFound();
-  const canManage = customer.role === "OWNER" || customer.role === "ADMIN";
   const dateLabel = (date: Date) => new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: customer.timezone }).format(date);
   const timeLabel = (date: Date) => new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: customer.timezone }).format(date);
   const hasDebt = customer.balanceCents > 0;
@@ -38,7 +42,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             {!customer.isActive && <span className="font-semibold text-[#a8530f]">Desactivado</span>}
           </p>
         </div>
-        <Link href={`/clientes/${customer.id}/editar`} className="button-quiet min-h-10 px-3 text-sm"><Pencil className="size-4" aria-hidden="true" /> Editar cliente</Link>
+        {can(membership, "CUSTOMER_EDIT") && <Link href={`/clientes/${customer.id}/editar`} className="button-quiet min-h-10 px-3 text-sm"><Pencil className="size-4" aria-hidden="true" /> Editar cliente</Link>}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
@@ -50,7 +54,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               <p className={`figure mt-0.5 text-[2.5rem] leading-none ${hasDebt ? "" : "text-success"}`}>{formatMoney(customer.balanceCents)}</p>
               {!hasDebt && <p className="status mt-2 text-sm text-success"><CircleCheck className="size-4" aria-hidden="true" /> Al día</p>}
             </div>
-            {customer.isActive && <Link href={`/vender?cliente=${customer.id}`} className="button-secondary"><ShoppingCart className="size-5" aria-hidden="true" /> Nueva venta</Link>}
+            {customer.isActive && can(membership, "SALE_CREATE") && <Link href={`/vender?cliente=${customer.id}`} className="button-secondary"><ShoppingCart className="size-5" aria-hidden="true" /> Nueva venta</Link>}
           </section>
 
           <section aria-labelledby="historial-cliente">
@@ -86,8 +90,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         </div>
 
         <aside className="grid gap-4 lg:sticky lg:top-6">
-          <CustomerPaymentForm customerId={customer.id} balanceCents={customer.balanceCents} hasOpenCash={Boolean(openCash)} initialKey={crypto.randomUUID()} />
-          {canManage && <CustomerAdjustmentForm customerId={customer.id} initialKey={crypto.randomUUID()} />}
+          {can(membership, "CUSTOMER_PAYMENT") && <CustomerPaymentForm customerId={customer.id} balanceCents={customer.balanceCents} hasOpenCash={Boolean(openCash)} initialKey={crypto.randomUUID()} />}
+          {can(membership, "CUSTOMER_ADJUSTMENT") && <CustomerAdjustmentForm customerId={customer.id} initialKey={crypto.randomUUID()} />}
           {customer.notes && <div className="rounded-2xl border border-line bg-surface p-5 text-sm"><p className="font-semibold">Notas</p><p className="mt-1 whitespace-pre-wrap leading-6 text-muted">{customer.notes}</p></div>}
         </aside>
       </div>

@@ -1,13 +1,16 @@
 import "server-only";
 
 import { addAiMessageForUser, finishAiUsage, getAiAccessForUser, getOrCreateAiConversation, getRecentAiMessagesForUser, reserveAiUsage } from "@/data/ai";
-import { createAiToolExecutor, DEETA_AI_TOOLS } from "@/data/ai-tools";
+import { aiToolAllowed, aiToolsForRole, createAiToolExecutor } from "@/data/ai-tools";
 import { GroqChatCompletionsProvider } from "@/lib/ai/groq-provider";
 import { restrictedRequestReply } from "@/lib/ai/guardrails";
 import type { AiPresentation } from "@/lib/ai/presentation";
 import { clarificationForAiQuestion, planDeetaAiRequest } from "@/lib/ai/planner";
 import { AiProviderError, type AiProvider, type AiRateLimitKind } from "@/lib/ai/types";
 import { getAiConfiguration } from "@/lib/env";
+import { hasPermission } from "@/lib/permissions";
+
+const profitabilityQuestion = /\b(?:ganancia|ganancias|gan[eé]|ganamos|ganando|margen|m[aá]rgenes|rentab\w*|resultado|utilidad|ganó|perd[ií]|p[eé]rdida)/i;
 
 export type AskDeetaAiResult =
   | { ok: true; conversationId: string; answer: string; presentation?: AiPresentation }
@@ -27,6 +30,17 @@ export async function askDeetaAi(
     await addAiMessageForUser(userId, conversationId, "USER", input.question);
     await addAiMessageForUser(userId, conversationId, "ASSISTANT", restrictedReply);
     return { ok: true, conversationId, answer: restrictedReply };
+  }
+  // Las preguntas de rentabilidad se rechazan antes de llegar al modelo si el
+  // rol no tiene ese permiso; lo mismo si la herramienta planificada no está permitida.
+  const plannedTool = planDeetaAiRequest(input.question, []);
+  const restrictedByRole = (!hasPermission(access.role, "PROFITABILITY_VIEW") && profitabilityQuestion.test(input.question))
+    || (plannedTool && !aiToolAllowed(access.role, plannedTool.name));
+  if (restrictedByRole) {
+    const reply = "Tu rol no tiene acceso a esa información del negocio. Si la necesitás, pedísela a quien administra el negocio.";
+    await addAiMessageForUser(userId, conversationId, "USER", input.question);
+    await addAiMessageForUser(userId, conversationId, "ASSISTANT", reply);
+    return { ok: true, conversationId, answer: reply };
   }
   const clarificationReply = clarificationForAiQuestion(input.question);
   if (clarificationReply) {
@@ -48,7 +62,9 @@ export async function askDeetaAi(
   const messages = await getRecentAiMessagesForUser(userId, conversationId, 6);
   const preparedTool = planDeetaAiRequest(input.question, messages);
   try {
-    const response = await provider.respond({ messages, tools: DEETA_AI_TOOLS, executeTool: createAiToolExecutor(userId), preparedTool });
+    const tools = aiToolsForRole(access.role);
+    const allowedPrepared = preparedTool && aiToolAllowed(access.role, preparedTool.name) ? preparedTool : undefined;
+    const response = await provider.respond({ messages, tools, executeTool: createAiToolExecutor(userId), preparedTool: allowedPrepared });
     await addAiMessageForUser(userId, conversationId, "ASSISTANT", response.text, response.presentation);
     await finishAiUsage(reserved.id, { ok: true, toolCalls: response.toolCalls, inputTokens: response.inputTokens, outputTokens: response.outputTokens, totalTokens: response.totalTokens });
     return { ok: true, conversationId, answer: response.text, presentation: response.presentation };

@@ -9,6 +9,8 @@ import { getCustomersPageForUser, type CustomerFilter } from "@/data/customers";
 import { relativeDaysLabel } from "@/lib/customers";
 import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Clientes" };
 
@@ -24,6 +26,9 @@ function isFilter(value: string | undefined): value is CustomerFilter {
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ buscar?: string; estado?: string }> }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "CUSTOMER_VIEW")) return <NoAccess section="Clientes" />;
+  const membership = await getActiveMembership(session.user.id);
   const search = params.buscar?.slice(0, 80) ?? "";
   const filter = isFilter(params.estado) ? params.estado : "all";
   const page = await getCustomersPageForUser(session.user.id, { search, filter });
@@ -38,7 +43,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <h1 className="page-title">Clientes</h1>
           <p className="page-lead">Quién te debe, cuánto y desde cuándo.</p>
         </div>
-        {!noCustomersYet && <Link href="/clientes/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo cliente</Link>}
+        {!noCustomersYet && can(membership, "CUSTOMER_EDIT") && <Link href="/clientes/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo cliente</Link>}
       </div>
 
       {noCustomersYet ? (
@@ -46,7 +51,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           icon={UsersRound}
           title="Todavía no cargaste clientes"
           description="Podés crear clientes para registrar ventas fiadas y llevar su cuenta corriente."
-          actions={[{ label: "Agregar cliente", href: "/clientes/nuevo", icon: Plus }]}
+          actions={can(membership, "CUSTOMER_EDIT") ? [{ label: "Agregar cliente", href: "/clientes/nuevo", icon: Plus }] : []}
         />
       ) : (
         <>

@@ -71,6 +71,13 @@
       "when": 1792167471862,
       "tag": "0009_clientes_fiado",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792170785844,
+      "tag": "0010_equipo_permisos",
+      "breakpoints": true
     }
   ]
 }

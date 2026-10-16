@@ -9,12 +9,17 @@ import { getExpenseCategoriesForUser, getExpenseContextForUser, getExpensesForPe
 import { formatMoney } from "@/lib/inventory";
 import { resolveAnalysisPeriod } from "@/lib/periods";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Gastos" };
 const methodLabels = { CASH: "Efectivo", TRANSFER: "Transferencia", CARD: "Tarjeta", OTHER: "Otro" } as const;
 
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "EXPENSE_VIEW")) return <NoAccess section="Gastos" />;
+  const membership = await getActiveMembership(session.user.id);
   const requestedPeriod = typeof params.period === "string" ? params.period : "MONTH";
   const selected = (["TODAY", "WEEK", "MONTH", "CUSTOM"] as const).find((value) => value === requestedPeriod) ?? "MONTH";
   const requestedStart = typeof params.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.start) ? params.start : undefined;
@@ -30,9 +35,9 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   ]);
   if (!context) redirect("/onboarding");
   const neverRegistered = onboarding !== null && !onboarding.signals.hasExpenses;
-  const header = <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="page-title">Gastos</h1><p className="page-lead">Registrá y entendé en qué estás gastando.</p></div>{!neverRegistered && <Link href="/gastos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Anotar gasto</Link>}</div>;
+  const header = <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="page-title">Gastos</h1><p className="page-lead">Registrá y entendé en qué estás gastando.</p></div>{!neverRegistered && can(membership, "EXPENSE_CREATE") && <Link href="/gastos/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Anotar gasto</Link>}</div>;
   if (neverRegistered) {
-    return <div>{header}<EmptyState icon={WalletCards} title="No registraste gastos todavía" description="Cuando cargues gastos como servicios, transporte o compras operativas, DEETA los tendrá en cuenta en tus análisis." actions={[{ label: "Anotar primer gasto", href: "/gastos/nuevo", icon: Plus }]} /></div>;
+    return <div>{header}<EmptyState icon={WalletCards} title="No registraste gastos todavía" description="Cuando cargues gastos como servicios, transporte o compras operativas, DEETA los tendrá en cuenta en tus análisis." actions={can(membership, "EXPENSE_CREATE") ? [{ label: "Anotar primer gasto", href: "/gastos/nuevo", icon: Plus }] : []} /></div>;
   }
   const categoryId = requestedCategory && categories.some((item) => item.id === requestedCategory) ? requestedCategory : undefined;
   const month = resolveAnalysisPeriod(context.today, "CURRENT_MONTH").current;
@@ -58,7 +63,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
         {selected === "CUSTOM" && <div className="grid grid-cols-2 gap-3 lg:grid-cols-1"><label className="field-label">Desde<input className="field-input" type="date" name="start" defaultValue={range.start} /></label><label className="field-label">Hasta<input className="field-input" type="date" name="end" defaultValue={range.end} /></label></div>}
         <label className="field-label">Categoría<select className="field-input" name="category" defaultValue={categoryId ?? ""}><option value="">Todas</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <button className="button-secondary w-full" type="submit">Aplicar filtros</button>
-        <Link href="/gastos/categorias" className="inline-flex min-h-11 items-center justify-center gap-2 text-sm font-semibold text-muted hover:text-ink"><Settings2 className="size-4" aria-hidden="true" /> Administrar categorías</Link>
+        {can(membership, "EXPENSE_CATEGORY_MANAGE") && <Link href="/gastos/categorias" className="inline-flex min-h-11 items-center justify-center gap-2 text-sm font-semibold text-muted hover:text-ink"><Settings2 className="size-4" aria-hidden="true" /> Administrar categorías</Link>}
       </form>
     </aside>
     <section aria-labelledby="historial-gastos">

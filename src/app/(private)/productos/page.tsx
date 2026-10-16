@@ -12,6 +12,8 @@ import {
 } from "@/data/products";
 import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Productos" };
 
@@ -32,11 +34,14 @@ export default async function ProductsPage({
   searchParams: Promise<{ buscar?: string; estado?: string }>;
 }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PRODUCT_VIEW")) return <NoAccess section="Productos" />;
+  const membership = await getActiveMembership(session.user.id);
   const search = params.buscar?.slice(0, 100) ?? "";
   const filter = isProductFilter(params.estado) ? params.estado : "active";
   const pageData = await getProductsPageForUser(session.user.id, { search, filter });
   if (!pageData) redirect("/onboarding");
-  const { products, counts, role } = pageData;
+  const { products, counts } = pageData;
   const trulyEmpty = counts.active === 0 && counts.inactive === 0 && filter === "active" && !search;
 
   const filterCounts: Partial<Record<ProductFilter, number>> = { active: counts.active, low: counts.low, out: counts.out, inactive: counts.inactive };
@@ -49,9 +54,9 @@ export default async function ProductsPage({
           <p className="page-lead">Precios, stock y estado de tu mercadería.</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          {role !== "EMPLOYEE" && <Link href="/productos/nuevo" className="button-primary col-span-2"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link>}
-          <Link href="/productos/ingresar" className={`button-secondary px-3 ${role === "EMPLOYEE" ? "col-span-2" : ""}`}><Camera className="size-5" aria-hidden="true" /> <span className="sm:hidden">Con cámara</span><span className="hidden sm:inline">Ingresar con cámara</span></Link>
-          {role !== "EMPLOYEE" && <Link href="/productos/importar" className="button-secondary px-3"><FileUp className="size-5" aria-hidden="true" /> Importar</Link>}
+          {can(membership, "PRODUCT_CREATE") && <Link href="/productos/nuevo" className="button-primary col-span-2"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link>}
+          {can(membership, "STOCK_ADJUST") && <Link href="/productos/ingresar" className={`button-secondary px-3 ${can(membership, "PRODUCT_IMPORT") ? "" : "col-span-2"}`}><Camera className="size-5" aria-hidden="true" /> <span className="sm:hidden">Con cámara</span><span className="hidden sm:inline">Ingresar con cámara</span></Link>}
+          {can(membership, "PRODUCT_IMPORT") && <Link href="/productos/importar" className="button-secondary px-3"><FileUp className="size-5" aria-hidden="true" /> Importar</Link>}
         </div>
       </div>
 
@@ -79,8 +84,8 @@ export default async function ProductsPage({
           icon={PackagePlus}
           title="Todavía no cargaste productos"
           description="Agregá tus productos para empezar a vender y controlar stock."
-          actions={role !== "EMPLOYEE" ? [{ label: "Agregar producto", href: "/productos/nuevo", icon: Plus }, { label: "Importar productos", href: "/productos/importar", icon: FileUp, variant: "secondary" }] : []}
-          note={role !== "EMPLOYEE" ? "¿Tenés tus productos en Excel? Podés cargarlos todos juntos." : "Pedile a quien administra el negocio que cargue los productos."}
+          actions={can(membership, "PRODUCT_CREATE") ? [{ label: "Agregar producto", href: "/productos/nuevo", icon: Plus }, { label: "Importar productos", href: "/productos/importar", icon: FileUp, variant: "secondary" }] : []}
+          note={can(membership, "PRODUCT_CREATE") ? "¿Tenés tus productos en Excel? Podés cargarlos todos juntos." : "Pedile a quien administra el negocio que cargue los productos."}
         />
       ) : products.length === 0 ? (
         <section className="mt-5 rounded-2xl border border-line bg-surface px-5 py-10 text-center">

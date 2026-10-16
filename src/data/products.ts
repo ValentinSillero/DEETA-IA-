@@ -3,8 +3,9 @@ import "server-only";
 import { and, asc, desc, eq, exists, ilike, inArray, or, sql } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
+import { rolesWith } from "@/lib/permissions";
 import {
-  businessMember,
+  activeMembership,
   product,
   stockMovement,
   user,
@@ -44,10 +45,10 @@ export async function getProductCountsForUser(userId: string) {
     })
     .from(product)
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, product.businessId),
-        eq(businessMember.userId, userId),
+        eq(activeMembership.businessId, product.businessId),
+        eq(activeMembership.userId, userId),
       ),
     );
 
@@ -81,10 +82,10 @@ export async function getProductsForUser(
     })
     .from(product)
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, product.businessId),
-        eq(businessMember.userId, userId),
+        eq(activeMembership.businessId, product.businessId),
+        eq(activeMembership.userId, userId),
       ),
     )
     .where(
@@ -117,7 +118,7 @@ export async function getProductsPageForUser(
   const rows = await sqlClient`
     with member as (
       select business_id, role
-      from business_member
+      from active_membership
       where user_id = ${userId}
       limit 1
     ), scoped_products as (
@@ -207,15 +208,15 @@ export async function getProductForUser(userId: string, productId: string) {
   const [record] = await db
     .select({
       product,
-      role: businessMember.role,
-      membershipUserId: businessMember.userId,
+      role: activeMembership.role,
+      membershipUserId: activeMembership.userId,
     })
     .from(product)
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, product.businessId),
-        eq(businessMember.userId, userId),
+        eq(activeMembership.businessId, product.businessId),
+        eq(activeMembership.userId, userId),
       ),
     )
     .where(eq(product.id, productId))
@@ -240,10 +241,10 @@ export async function getMovementsForUser(userId: string, productId: string) {
       ),
     )
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, stockMovement.businessId),
-        eq(businessMember.userId, userId),
+        eq(activeMembership.businessId, stockMovement.businessId),
+        eq(activeMembership.userId, userId),
       ),
     )
     .innerJoin(user, eq(user.id, stockMovement.createdBy))
@@ -260,9 +261,9 @@ export async function createProductForUser(userId: string, values: ProductCreate
   await sqlClient`
     with member as (
       select business_id
-      from business_member
+      from active_membership
       where user_id = ${userId}
-        and role in ('OWNER', 'ADMIN')
+        and role = any(${rolesWith("PRODUCT_CREATE")}::member_role[])
       limit 1
     ), created_product as (
       insert into product (
@@ -319,13 +320,13 @@ export async function updateProductForUser(
         eq(product.id, productId),
         exists(
           db
-            .select({ id: businessMember.id })
-            .from(businessMember)
+            .select({ id: activeMembership.id })
+            .from(activeMembership)
             .where(
               and(
-                eq(businessMember.businessId, product.businessId),
-                eq(businessMember.userId, userId),
-                inArray(businessMember.role, ["OWNER", "ADMIN"]),
+                eq(activeMembership.businessId, product.businessId),
+                eq(activeMembership.userId, userId),
+                inArray(activeMembership.role, rolesWith("PRODUCT_EDIT")),
               ),
             ),
         ),
@@ -350,13 +351,13 @@ export async function setProductActiveForUser(
         eq(product.id, productId),
         exists(
           db
-            .select({ id: businessMember.id })
-            .from(businessMember)
+            .select({ id: activeMembership.id })
+            .from(activeMembership)
             .where(
               and(
-                eq(businessMember.businessId, product.businessId),
-                eq(businessMember.userId, userId),
-                inArray(businessMember.role, ["OWNER", "ADMIN"]),
+                eq(activeMembership.businessId, product.businessId),
+                eq(activeMembership.userId, userId),
+                inArray(activeMembership.role, rolesWith("PRODUCT_EDIT")),
               ),
             ),
         ),
@@ -382,10 +383,10 @@ export async function createStockMovementForUser(
     with target as (
       select p.id, p.business_id, p.current_stock
       from product p
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = p.business_id
        and bm.user_id = ${userId}
-       and bm.role in ('OWNER', 'ADMIN')
+       and bm.role = any(${rolesWith("STOCK_ADJUST")}::member_role[])
       where p.id = ${productId}
         and p.is_active = true
       for update of p

@@ -76,6 +76,10 @@ La migración `0006_flawless_nova.sql` agrega conversaciones, mensajes y medici�
 
 La migración `0009_clientes_fiado.sql` agrega clientes, cuenta corriente y cobro dividido. Es aditiva: crea las tablas `customer`, `customer_account_movement` y `sale_payment`, suma `customer_id` y `client_request_id` (opcionales) a `sale`, agrega los valores `CREDIT` y `MIXED` a `payment_method` y `CUSTOMER_PAYMENT` a `income_source`, y reemplaza el índice único de ingresos por venta por uno por venta y medio de pago. No reescribe ventas existentes: las ventas anteriores se leen con su único medio de pago. El saldo de cada cliente se reconstruye desde sus movimientos (positivo aumenta la deuda, negativo la reduce) y se guarda materializado para listar rápido.
 
+La migración `0010_equipo_permisos.sql` habilita equipos con roles: agrega los roles `MANAGER` (Encargado) y `SELLER` (Vendedor), permite que una persona pertenezca a varios negocios (`business_member.is_current` marca el negocio activo y la vista `active_membership` acota todas las lecturas a ese negocio), y crea `business_invitation` (solo guarda el hash SHA-256 del token, vence a los 7 días y es de un solo uso) y `audit_log` para acciones sensibles. Es aditiva: no reescribe membresías existentes. El rol anterior `EMPLOYEE` se conserva y se trata como Encargado. Los permisos de cada rol viven en `src/lib/permissions.ts`; el SQL, las acciones, las páginas y DEETA AI los leen desde ahí.
+
+Como todavía no hay proveedor de email, la invitación genera un enlace personal para copiar y enviar; el envío automático puede agregarse más adelante.
+
 ## Ejecución local
 
 ```bash
@@ -149,6 +153,12 @@ La prueba integrada de clientes y fiado cubre venta 100 % fiada, venta parcialme
 
 ```powershell
 $env:RUN_DB_TESTS="1"; npm test -- src/data/customers.integration.test.ts
+```
+
+La prueba integrada de equipo cubre invitaciones (válida, vencida, usada, email incorrecto, duplicada), varios negocios con roles distintos, intentos de escalar privilegios, protección del último dueño, trazabilidad y permisos de DEETA AI:
+
+```powershell
+$env:RUN_DB_TESTS="1"; npm test -- src/data/team.integration.test.ts
 ```
 
 ## Estructura

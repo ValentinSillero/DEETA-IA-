@@ -3,9 +3,10 @@ import "server-only";
 import { and, asc, eq, gt, ilike, or } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
-import { businessMember, product, type PaymentMethod } from "@/db/schema";
+import { activeMembership, product, type PaymentMethod } from "@/db/schema";
 import type { CompleteSaleInput } from "@/lib/sale-validations";
 import { saleRequestRows, summarizeSalePayments, type SalePaymentLine } from "@/lib/sales";
+import { rolesWith } from "@/lib/permissions";
 
 export type SaleProductDto = {
   id: string;
@@ -28,10 +29,10 @@ export async function getSaleProductsForUser(userId: string, search = "") {
     })
     .from(product)
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, product.businessId),
-        eq(businessMember.userId, userId),
+        eq(activeMembership.businessId, product.businessId),
+        eq(activeMembership.userId, userId),
       ),
     )
     .where(
@@ -91,9 +92,9 @@ export async function completeSaleForUser(
   const rows = await sqlClient`
     with member as (
       select business_id
-      from business_member
+      from active_membership
       where user_id = ${userId}
-        and role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+        and role = any(${rolesWith("SALE_CREATE")}::member_role[])
       limit 1
     ), requested as (
       select item_id, movement_id, product_id, quantity
@@ -299,7 +300,7 @@ export async function completeSaleForUser(
     const existing = await sqlClient`
       select s.id, s.total_cents
       from sale s
-      inner join business_member bm on bm.business_id = s.business_id and bm.user_id = ${userId}
+      inner join active_membership bm on bm.business_id = s.business_id and bm.user_id = ${userId}
       where s.client_request_id = ${clientRequestId}
       limit 1
     `;
@@ -307,11 +308,11 @@ export async function completeSaleForUser(
   }
 
   const [membershipRows, openCashRows, productRows, customerRows] = await Promise.all([
-    sqlClient`select 1 from business_member where user_id = ${userId} limit 1`,
+    sqlClient`select 1 from active_membership where user_id = ${userId} limit 1`,
     sqlClient`
       select 1
       from cash_session cs
-      inner join business_member bm on bm.business_id = cs.business_id
+      inner join active_membership bm on bm.business_id = cs.business_id
       where bm.user_id = ${userId} and cs.status = 'OPEN'
       limit 1
     `,
@@ -323,7 +324,7 @@ export async function completeSaleForUser(
       )
       select p.id, p.current_stock, p.sale_price_cents, r.quantity
       from product p
-      inner join business_member bm on bm.business_id = p.business_id
+      inner join active_membership bm on bm.business_id = p.business_id
       inner join requested r on r.product_id = p.id
       where bm.user_id = ${userId}
         and p.is_active = true
@@ -331,7 +332,7 @@ export async function completeSaleForUser(
     customerId
       ? sqlClient`
           select 1 from customer c
-          inner join business_member bm on bm.business_id = c.business_id
+          inner join active_membership bm on bm.business_id = c.business_id
           where bm.user_id = ${userId} and c.id = ${customerId} and c.is_active = true
           limit 1
         `
@@ -384,7 +385,7 @@ export async function getSalesForUser(userId: string): Promise<SaleListItem[]> {
       count(si.id)::int as item_count,
       coalesce(sum(si.quantity), 0)::int as unit_count
     from sale s
-    inner join business_member bm
+    inner join active_membership bm
       on bm.business_id = s.business_id and bm.user_id = ${userId}
     inner join "user" u on u.id = s.created_by
     left join customer c on c.id = s.customer_id and c.business_id = s.business_id
@@ -443,7 +444,7 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
       s.cancelled_at, canceller.name as cancelled_by_name, s.cancellation_reason,
       cs.status as cash_session_status, c.id as customer_id, c.name as customer_name
     from sale s
-    inner join business_member bm
+    inner join active_membership bm
       on bm.business_id = s.business_id and bm.user_id = ${userId}
     inner join "user" creator on creator.id = s.created_by
     left join "user" canceller on canceller.id = s.cancelled_by
@@ -461,7 +462,7 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
       select si.id, si.product_id, si.product_name_snapshot, si.quantity,
              si.unit_price_cents, si.subtotal_cents
       from sale_item si
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = si.business_id and bm.user_id = ${userId}
       where si.sale_id = ${saleId}
       order by si.created_at, si.id
@@ -469,7 +470,7 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
     sqlClient`
       select sp.method, sp.amount_cents
       from sale_payment sp
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = sp.business_id and bm.user_id = ${userId}
       where sp.sale_id = ${saleId}
       order by sp.method
@@ -539,9 +540,9 @@ export async function cancelSaleForUser(
   const rows = await sqlClient`
     with member as (
       select business_id
-      from business_member
+      from active_membership
       where user_id = ${userId}
-        and role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+        and role = any(${rolesWith("SALE_CANCEL")}::member_role[])
       limit 1
     ), target_sale as (
       select s.*
@@ -687,7 +688,7 @@ export async function getTodaySalesSummaryForUser(userId: string): Promise<Today
     with today_sales as (
       select s.id, s.total_cents, s.payment_method
       from sale s
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = s.business_id and bm.user_id = ${userId}
       inner join business b on b.id = s.business_id
       where s.status = 'COMPLETED'

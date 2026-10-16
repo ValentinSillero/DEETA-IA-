@@ -20,6 +20,7 @@ import { getBusinessForUser } from "@/data/businesses";
 import { getOpenCashSessionForUser } from "@/data/cash";
 import { getCustomerDebtSummaryForUser } from "@/data/customers";
 import { getDashboardDetectionsForUser } from "@/data/intelligent-analytics";
+import { can, getActiveMembership } from "@/data/membership";
 import { getOnboardingPlanForUser } from "@/data/onboarding";
 import { getProductCountsForUser } from "@/data/products";
 import { buildDeterministicInsights } from "@/lib/ai/insights";
@@ -59,7 +60,10 @@ export default async function DashboardPage() {
   if (!analytics) return null;
   const hasSales = onboarding?.state.signals.hasSales ?? true;
   const hasProducts = onboarding?.state.signals.hasProducts ?? true;
-  const canUseAi = businessContext?.role !== "EMPLOYEE";
+  const membership = await getActiveMembership(session.user.id);
+  const canUseAi = can(membership, "AI_USE") && can(membership, "PROFITABILITY_VIEW");
+  // El margen y el resultado son información de rentabilidad: solo para quien tiene ese permiso.
+  const showResult = can(membership, "PROFITABILITY_VIEW");
 
   const today = analytics.current;
   const payments = analytics.payments;
@@ -89,7 +93,7 @@ export default async function DashboardPage() {
       {/* Hoy: lo vendido y el resultado, como una hoja de caja del día. */}
       <section aria-labelledby="hoy-titulo" className="overflow-hidden rounded-2xl border border-line bg-surface">
         <h2 id="hoy-titulo" className="sr-only">Hoy</h2>
-        <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className={`grid ${showResult ? "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]" : ""}`}>
           <div className="px-5 py-5 sm:px-6 sm:py-6">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-sm font-semibold text-muted">Ventas de hoy</p>
@@ -103,7 +107,7 @@ export default async function DashboardPage() {
               {payments.creditCents > 0 && <div className="ledger-row"><span>Fiado (no entra a caja)</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.creditCents)}</span></div>}
             </div>
           </div>
-          <div className="border-t border-line bg-surface-2/60 px-5 py-5 sm:px-6 sm:py-6 lg:border-l lg:border-t-0">
+          {showResult && <div className="border-t border-line bg-surface-2/60 px-5 py-5 sm:px-6 sm:py-6 lg:border-l lg:border-t-0">
             <p className="text-sm font-semibold text-muted">Resultado del día</p>
             <div className="ledger mt-3">
               <div className="ledger-row"><span>Margen de lo vendido</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(today.grossMarginCents)}</span></div>
@@ -114,7 +118,7 @@ export default async function DashboardPage() {
               </div>
             </div>
             <Link href="/analisis?periodo=TODAY" className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">Ver análisis del día <ArrowRight className="size-4" aria-hidden="true" /></Link>
-          </div>
+          </div>}
         </div>
       </section>
 
@@ -123,7 +127,7 @@ export default async function DashboardPage() {
           <h2 id="atender-titulo" className="section-title mb-3">Para atender</h2>
           <div className="list-surface">
             <AttentionRow href="/caja" icon={CircleDollarSign} title={openCash ? "Caja abierta" : "Caja cerrada"} detail={openCash ? `Efectivo esperado: ${formatMoney(openCash.expectedCashCents)}` : "Abrila antes de cobrar en efectivo."} tone={openCash ? "ok" : "warn"} status={openCash ? "En curso" : "Pendiente"} />
-            {debts.pendingCents > 0 && <AttentionRow href="/clientes?estado=debt" icon={UsersRound} title={`Te deben ${formatMoney(debts.pendingCents)}`} detail={`${debts.debtors} ${debts.debtors === 1 ? "cliente con deuda" : "clientes con deuda"}.`} tone="warn" status="Fiado" />}
+            {can(membership, "CUSTOMER_VIEW") && debts.pendingCents > 0 && <AttentionRow href="/clientes?estado=debt" icon={UsersRound} title={`Te deben ${formatMoney(debts.pendingCents)}`} detail={`${debts.debtors} ${debts.debtors === 1 ? "cliente con deuda" : "clientes con deuda"}.`} tone="warn" status="Fiado" />}
             {hasProducts ? (
               <AttentionRow href="/productos?estado=low" icon={TriangleAlert} title={productCounts.low === 0 ? "Stock sin alertas" : `${productCounts.low} ${productCounts.low === 1 ? "producto con poco stock" : "productos con poco stock"}`} detail={urgent > 0 ? `${urgent} ${urgent === 1 ? "necesita" : "necesitan"} reposición pronto.` : "Revisá lo que conviene reponer."} tone={productCounts.low > 0 || urgent > 0 ? "warn" : "ok"} status={productCounts.low > 0 || urgent > 0 ? "Revisar" : "Al día"} />
             ) : (
@@ -150,11 +154,12 @@ export default async function DashboardPage() {
             <h2 id="atajos-titulo" className="section-title mb-3">Atajos</h2>
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line">
               {([
-                { href: "/gastos/nuevo", label: "Anotar gasto", icon: WalletCards },
-                { href: "/scanner", label: "Escanear", icon: Camera },
-                { href: "/ventas", label: "Ver ventas", icon: ReceiptText },
-                { href: "/configuracion/negocio", label: "Mi negocio", icon: Settings },
-              ] as const).map(({ href, label, icon: Icon }) => (
+                { href: "/gastos/nuevo", label: "Anotar gasto", icon: WalletCards, permission: "EXPENSE_CREATE" },
+                { href: "/scanner", label: "Escanear", icon: Camera, permission: "SALE_CREATE" },
+                { href: "/ventas", label: "Ver ventas", icon: ReceiptText, permission: "SALE_VIEW" },
+                { href: "/clientes", label: "Clientes", icon: UsersRound, permission: "CUSTOMER_VIEW" },
+                { href: "/configuracion/negocio", label: "Mi negocio", icon: Settings, permission: "BUSINESS_SETTINGS" },
+              ] as const).filter((shortcut) => can(membership, shortcut.permission)).slice(0, 4).map(({ href, label, icon: Icon }) => (
                 <Link key={href} href={href} className="flex min-h-13 items-center gap-2.5 bg-surface px-4 text-sm font-semibold transition-colors hover:bg-surface-2">
                   <Icon className="size-[18px] shrink-0 text-muted" aria-hidden="true" />{label}
                 </Link>

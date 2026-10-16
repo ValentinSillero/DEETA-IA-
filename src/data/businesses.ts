@@ -4,22 +4,23 @@ import { cache } from "react";
 import { and, eq, exists, inArray } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
-import { business, businessMember } from "@/db/schema";
+import { business, activeMembership } from "@/db/schema";
 import { manageableBusinessId } from "@/lib/authorization";
 import type { BusinessInput } from "@/lib/validations";
 import { DEFAULT_EXPENSE_CATEGORIES } from "@/lib/constants";
+import { rolesWith } from "@/lib/permissions";
 
 export const getBusinessForUser = cache(async (userId: string) => {
   const db = getDb();
   const [record] = await db
     .select({
       business,
-      role: businessMember.role,
-      membershipUserId: businessMember.userId,
+      role: activeMembership.role,
+      membershipUserId: activeMembership.userId,
     })
-    .from(businessMember)
-    .innerJoin(business, eq(business.id, businessMember.businessId))
-    .where(eq(businessMember.userId, userId))
+    .from(activeMembership)
+    .innerJoin(business, eq(business.id, activeMembership.businessId))
+    .where(eq(activeMembership.userId, userId))
     .limit(1);
 
   return record ?? null;
@@ -77,13 +78,13 @@ export async function updateBusinessForUser(userId: string, values: BusinessInpu
         eq(business.id, authorizedBusinessId),
         exists(
           db
-            .select({ id: businessMember.id })
-            .from(businessMember)
+            .select({ id: activeMembership.id })
+            .from(activeMembership)
             .where(
               and(
-                eq(businessMember.userId, userId),
-                eq(businessMember.businessId, business.id),
-                inArray(businessMember.role, ["OWNER", "ADMIN"]),
+                eq(activeMembership.userId, userId),
+                eq(activeMembership.businessId, business.id),
+                inArray(activeMembership.role, rolesWith("BUSINESS_SETTINGS")),
               ),
             ),
         ),

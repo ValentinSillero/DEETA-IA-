@@ -1,14 +1,16 @@
 import "server-only";
 
 import { getSqlClient } from "@/db";
+import type { MemberRole } from "@/db/schema";
 import { decodeAiMessageContent, encodeAiMessageContent } from "@/lib/ai/message-content";
 import type { AiPresentation } from "@/lib/ai/presentation";
 import type { AiConversationMessage } from "@/lib/ai/types";
+import { rolesWith } from "@/lib/permissions";
 
 export type AiAccessContext = {
   businessId: string;
   userId: string;
-  role: "OWNER" | "ADMIN";
+  role: MemberRole;
   timezone: string;
 };
 
@@ -16,8 +18,8 @@ export async function getAiAccessForUser(userId: string): Promise<AiAccessContex
   const sql = getSqlClient();
   const rows = await sql`
     select bm.business_id, bm.user_id, bm.role, b.timezone
-    from business_member bm inner join business b on b.id = bm.business_id
-    where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN') limit 1
+    from active_membership bm inner join business b on b.id = bm.business_id
+    where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[]) limit 1
   `;
   const row = rows[0];
   return row ? { businessId: String(row.business_id), userId: String(row.user_id), role: row.role as AiAccessContext["role"], timezone: String(row.timezone) } : null;
@@ -29,10 +31,10 @@ export async function getLatestAiConversationForUser(userId: string) {
     with latest as (
       select c.id, c.business_id, c.title
       from ai_conversation c
-      inner join business_member bm
+      inner join active_membership bm
         on bm.business_id = c.business_id
        and bm.user_id = ${userId}
-       and bm.role in ('OWNER', 'ADMIN')
+       and bm.role = any(${rolesWith("AI_USE")}::member_role[])
       where c.user_id = ${userId}
       order by c.updated_at desc
       limit 1
@@ -66,7 +68,7 @@ export async function getOrCreateAiConversation(userId: string, conversationId: 
   if (conversationId) {
     const existing = await sql`
       select c.id from ai_conversation c
-      inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
+      inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[])
       where c.id = ${conversationId} and c.user_id = ${userId} limit 1
     `;
     return existing[0] ? String(existing[0].id) : null;
@@ -75,7 +77,7 @@ export async function getOrCreateAiConversation(userId: string, conversationId: 
   const rows = await sql`
     insert into ai_conversation (id, business_id, user_id, title)
     select ${id}, bm.business_id, ${userId}, ${title}
-    from business_member bm where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
+    from active_membership bm where bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[])
     returning id
   `;
   return rows[0] ? String(rows[0].id) : null;
@@ -88,7 +90,7 @@ export async function addAiMessageForUser(userId: string, conversationId: string
   const rows = await sql`
     with allowed as (
       select c.id, c.business_id from ai_conversation c
-      inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
+      inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[])
       where c.id = ${conversationId} and c.user_id = ${userId} limit 1
     ), inserted as (
       insert into ai_message (id, business_id, conversation_id, user_id, role, content)
@@ -106,7 +108,7 @@ export async function getRecentAiMessagesForUser(userId: string, conversationId:
   const rows = await sql`
     select m.role, m.content from ai_message m
     inner join ai_conversation c on c.id = m.conversation_id and c.business_id = m.business_id
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
+    inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role = any(${rolesWith("AI_USE")}::member_role[])
     where c.id = ${conversationId} and c.user_id = ${userId}
     order by m.created_at desc limit ${limit}
   `;

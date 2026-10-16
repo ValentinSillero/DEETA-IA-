@@ -1,6 +1,7 @@
 import { updateProductImportRowForUser } from "@/data/product-imports";
 import { importRowRequestSchema } from "@/lib/product-import-api";
 import { getFreshSession } from "@/lib/session";
+import { forbiddenResponse } from "@/lib/action-guard";
 
 export async function PATCH(
   request: Request,
@@ -8,6 +9,8 @@ export async function PATCH(
 ) {
   const session = await getFreshSession();
   if (!session) return Response.json({ message: "Iniciá sesión para continuar." }, { status: 401 });
+  const forbidden = await forbiddenResponse(session.user.id, "PRODUCT_IMPORT");
+  if (forbidden) return forbidden;
   const parsed = importRowRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ message: "Revisá los datos de esta fila." }, { status: 400 });
   const { id, rowId } = await params;

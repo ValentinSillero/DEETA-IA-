@@ -3,8 +3,9 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
-import { businessMember, product } from "@/db/schema";
+import { activeMembership, product } from "@/db/schema";
 import { connectedPairingExpiry, createPairingToken, hashPairingToken, pairingExpiry } from "@/lib/pairing";
+import { rolesWith } from "@/lib/permissions";
 
 export type ScannerProductDto = {
   id: string;
@@ -18,7 +19,7 @@ export async function findProductByBarcodeForUser(userId: string, barcode: strin
   const db = getDb();
   const [row] = await db.select({ id: product.id, name: product.name, barcode: product.barcode, salePriceCents: product.salePriceCents, currentStock: product.currentStock })
     .from(product)
-    .innerJoin(businessMember, and(eq(businessMember.businessId, product.businessId), eq(businessMember.userId, userId)))
+    .innerJoin(activeMembership, and(eq(activeMembership.businessId, product.businessId), eq(activeMembership.userId, userId)))
     .where(and(eq(product.barcode, barcode), eq(product.isActive, true)))
     .limit(1);
   return row?.barcode ? { ...row, barcode: row.barcode } : null;
@@ -40,8 +41,8 @@ export async function createPairingForUser(userId: string, targetCartId: string)
   const expiresAt = pairingExpiry();
   const rows = await sqlClient`
     with member as (
-      select business_id from business_member
-      where user_id = ${userId} and role in ('OWNER', 'ADMIN', 'EMPLOYEE') limit 1
+      select business_id from active_membership
+      where user_id = ${userId} and role = any(${rolesWith("SALE_CREATE")}::member_role[]) limit 1
     ), revoked as (
       update scanner_pairing_session s
       set status = 'REVOKED', disconnected_at = now(), updated_at = now()
@@ -84,10 +85,10 @@ export async function connectPairingForUser(userId: string, token: string) {
       update scanner_pairing_session s
       set status = 'CONNECTED', connected_at = coalesce(s.connected_at, now()),
           expires_at = ${connectedUntil}, disconnected_at = null, updated_at = now()
-      from business_member bm
+      from active_membership bm
       where s.token_hash = ${tokenHash}
         and bm.business_id = s.business_id and bm.user_id = ${userId}
-        and bm.role in ('OWNER', 'ADMIN', 'EMPLOYEE')
+        and bm.role = any(${rolesWith("SALE_CREATE")}::member_role[])
         and s.status in ('WAITING', 'CONNECTED') and s.expires_at > now()
       returning s.id, s.target_cart_id, s.status, s.expires_at, s.connected_at
     ) select * from connected
@@ -100,7 +101,7 @@ export async function getPairingForPcForUser(userId: string, pairingId: string) 
   const rows = await sqlClient`
     select s.id, s.target_cart_id, s.status, s.expires_at, s.connected_at
     from scanner_pairing_session s
-    inner join business_member bm on bm.business_id = s.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = s.business_id and bm.user_id = ${userId}
     where s.id = ${pairingId} and s.created_by = ${userId}
     limit 1
   `;
@@ -113,7 +114,7 @@ export async function getPairingForMobileUser(userId: string, pairingId: string,
   const rows = await sqlClient`
     select s.id, s.target_cart_id, s.status, s.expires_at, s.connected_at
     from scanner_pairing_session s
-    inner join business_member bm on bm.business_id = s.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = s.business_id and bm.user_id = ${userId}
     where s.id = ${pairingId} and s.token_hash = ${tokenHash}
       and s.status = 'CONNECTED' and s.expires_at > now()
     limit 1
@@ -140,7 +141,7 @@ export async function sendRemoteScanForUser(userId: string, token: string, input
     with valid_pairing as (
       select s.id, s.business_id
       from scanner_pairing_session s
-      inner join business_member bm on bm.business_id = s.business_id and bm.user_id = ${userId}
+      inner join active_membership bm on bm.business_id = s.business_id and bm.user_id = ${userId}
       where s.id = ${input.pairingId} and s.token_hash = ${tokenHash}
         and s.status = 'CONNECTED' and s.expires_at > now()
       for update of s
@@ -208,7 +209,7 @@ export async function getPairingFeedForUser(userId: string, pairingId: string, a
   await sqlClient`
     update scanner_pairing_session s set status = 'EXPIRED', updated_at = now()
     where s.id = ${pairingId} and s.status in ('WAITING', 'CONNECTED') and s.expires_at <= now()
-      and exists (select 1 from business_member bm where bm.business_id = s.business_id and bm.user_id = ${userId})
+      and exists (select 1 from active_membership bm where bm.business_id = s.business_id and bm.user_id = ${userId})
   `;
   const pairing = await getPairingForPcForUser(userId, pairingId);
   if (!pairing) return null;
@@ -232,7 +233,7 @@ export async function revokePairingForPcUser(userId: string, pairingId: string) 
     update scanner_pairing_session s set status = 'REVOKED', disconnected_at = now(), updated_at = now()
     where s.id = ${pairingId} and s.created_by = ${userId}
       and s.status in ('WAITING', 'CONNECTED')
-      and exists (select 1 from business_member bm where bm.business_id = s.business_id and bm.user_id = ${userId})
+      and exists (select 1 from active_membership bm where bm.business_id = s.business_id and bm.user_id = ${userId})
     returning id
   `;
   return rows.length > 0;
@@ -244,7 +245,7 @@ export async function revokePairingForMobileUser(userId: string, pairingId: stri
   const rows = await sqlClient`
     update scanner_pairing_session s set status = 'REVOKED', disconnected_at = now(), updated_at = now()
     where s.id = ${pairingId} and s.token_hash = ${tokenHash} and s.status = 'CONNECTED'
-      and exists (select 1 from business_member bm where bm.business_id = s.business_id and bm.user_id = ${userId})
+      and exists (select 1 from active_membership bm where bm.business_id = s.business_id and bm.user_id = ${userId})
     returning id
   `;
   return rows.length > 0;

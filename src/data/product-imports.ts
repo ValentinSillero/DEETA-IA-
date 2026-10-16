@@ -3,7 +3,8 @@ import "server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
-import { businessMember, productImport, productImportRow } from "@/db/schema";
+import { activeMembership, productImport, productImportRow } from "@/db/schema";
+import { rolesWith } from "@/lib/permissions";
 import {
   PRODUCT_IMPORT_LIMITS,
   productImportSummary,
@@ -25,9 +26,9 @@ type NewImportInput = {
 async function managedBusinessForUser(userId: string) {
   const db = getDb();
   const [membership] = await db
-    .select({ businessId: businessMember.businessId })
-    .from(businessMember)
-    .where(and(eq(businessMember.userId, userId), inArray(businessMember.role, ["OWNER", "ADMIN"])))
+    .select({ businessId: activeMembership.businessId })
+    .from(activeMembership)
+    .where(and(eq(activeMembership.userId, userId), inArray(activeMembership.role, rolesWith("PRODUCT_IMPORT"))))
     .limit(1);
   return membership?.businessId ?? null;
 }
@@ -69,14 +70,14 @@ export async function createProductImportForUser(userId: string, input: NewImpor
 export async function getProductImportForUser(userId: string, importId: string) {
   const db = getDb();
   const [record] = await db
-    .select({ productImport, role: businessMember.role })
+    .select({ productImport, role: activeMembership.role })
     .from(productImport)
     .innerJoin(
-      businessMember,
+      activeMembership,
       and(
-        eq(businessMember.businessId, productImport.businessId),
-        eq(businessMember.userId, userId),
-        inArray(businessMember.role, ["OWNER", "ADMIN"]),
+        eq(activeMembership.businessId, productImport.businessId),
+        eq(activeMembership.userId, userId),
+        inArray(activeMembership.role, rolesWith("PRODUCT_IMPORT")),
       ),
     )
     .where(eq(productImport.id, importId))
@@ -272,10 +273,10 @@ export async function confirmProductImportForUser(userId: string, importId: stri
         and i.business_id = ${importRecord.businessId}
         and i.status = 'READY'
         and exists (
-          select 1 from business_member bm
+          select 1 from active_membership bm
           where bm.business_id = i.business_id
             and bm.user_id = ${userId}
-            and bm.role in ('OWNER', 'ADMIN')
+            and bm.role = any(${rolesWith("PRODUCT_IMPORT")}::member_role[])
         )
       returning id
     `,

@@ -29,7 +29,7 @@ suite("onboarding por negocio en PostgreSQL", () => {
     await sql!`insert into business_member (id, business_id, user_id, role) values
       (${crypto.randomUUID()}, ${ids.businessA}, ${ids.userA}, 'OWNER'),
       (${crypto.randomUUID()}, ${ids.businessB}, ${ids.userB}, 'OWNER'),
-      (${crypto.randomUUID()}, ${ids.businessB}, ${ids.employeeB}, 'EMPLOYEE')`;
+      (${crypto.randomUUID()}, ${ids.businessB}, ${ids.employeeB}, 'SELLER')`;
     await sql!`insert into expense_category (id, business_id, name) values (${ids.categoryA}, ${ids.businessA}, 'Pruebas')`;
   });
   afterAll(async () => {
@@ -79,7 +79,7 @@ suite("onboarding por negocio en PostgreSQL", () => {
 
     // El empleado de B ve el mismo negocio, sin acciones de catálogo.
     const employee = await getBusinessOnboardingStateForUser(ids.employeeB);
-    expect(employee).toMatchObject({ businessId: ids.businessB, role: "EMPLOYEE" });
+    expect(employee).toMatchObject({ businessId: ids.businessB, role: "SELLER" });
     expect(buildOnboardingPlan({ signals: employee!.signals, role: employee!.role, preference: null, now: new Date() }).steps[0].actions).toEqual([]);
 
     // Un usuario sin negocio no obtiene estado.

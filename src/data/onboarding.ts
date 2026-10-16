@@ -40,7 +40,7 @@ export const getBusinessOnboardingStateForUser = cache(async (userId: string): P
       (select min(c.opened_at) from cash_session c where c.business_id = bm.business_id) as first_cash_at,
       (select min(s.created_at) from sale s where s.business_id = bm.business_id) as first_sale_at,
       exists (select 1 from expense e where e.business_id = bm.business_id) as has_expenses
-    from business_member bm
+    from active_membership bm
     where bm.user_id = ${userId}
     limit 1
   `;

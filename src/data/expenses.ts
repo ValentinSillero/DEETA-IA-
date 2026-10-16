@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSqlClient } from "@/db";
 import type { CreateExpenseInput } from "@/lib/expense-validations";
+import { rolesWith } from "@/lib/permissions";
 
 export type ExpenseCategoryDto = { id: string; name: string; isActive: boolean; usedCount: number };
 export type ExpenseDto = {
@@ -25,7 +26,7 @@ export async function getExpenseContextForUser(userId: string) {
     select b.timezone, timezone(b.timezone, now())::date::text as today,
       bm.role,
       (select cs.id from cash_session cs where cs.business_id = b.id and cs.status = 'OPEN' limit 1) as open_cash_id
-    from business_member bm inner join business b on b.id = bm.business_id
+    from active_membership bm inner join business b on b.id = bm.business_id
     where bm.user_id = ${userId} limit 1
   `;
   const row = rows[0];
@@ -40,7 +41,7 @@ export async function getExpenseCategoriesForUser(userId: string, includeInactiv
   const rows = await sql`
     select c.id, c.name, c.is_active, count(e.id)::int as used_count
     from expense_category c
-    inner join business_member bm on bm.business_id = c.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = c.business_id and bm.user_id = ${userId}
     left join expense e on e.category_id = c.id and e.business_id = c.business_id
     where (${includeInactive}::boolean = true or c.is_active = true)
     group by c.id
@@ -55,8 +56,8 @@ export async function createExpenseCategoryForUser(userId: string, name: string)
   const rows = await sql`
     insert into expense_category (id, business_id, name)
     select ${id}, bm.business_id, ${name}
-    from business_member bm
-    where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN')
+    from active_membership bm
+    where bm.user_id = ${userId} and bm.role = any(${rolesWith("EXPENSE_CATEGORY_MANAGE")}::member_role[])
     on conflict (business_id, name) do nothing
     returning id
   `;
@@ -68,7 +69,7 @@ export async function updateExpenseCategoryForUser(userId: string, categoryId: s
   const rows = await sql`
     update expense_category c set name = ${name}, updated_at = now()
     where c.id = ${categoryId}
-      and exists (select 1 from business_member bm where bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN'))
+      and exists (select 1 from active_membership bm where bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role = any(${rolesWith("EXPENSE_CATEGORY_MANAGE")}::member_role[]))
     returning id
   `;
   return rows.length > 0;
@@ -79,7 +80,7 @@ export async function toggleExpenseCategoryForUser(userId: string, categoryId: s
   const rows = await sql`
     update expense_category c set is_active = ${isActive}, updated_at = now()
     where c.id = ${categoryId}
-      and exists (select 1 from business_member bm where bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN'))
+      and exists (select 1 from active_membership bm where bm.business_id = c.business_id and bm.user_id = ${userId} and bm.role = any(${rolesWith("EXPENSE_CATEGORY_MANAGE")}::member_role[]))
     returning id
   `;
   return rows.length > 0;
@@ -92,8 +93,8 @@ export async function createExpenseForUser(userId: string, input: CreateExpenseI
   const id = crypto.randomUUID();
   const rows = await sql`
     with member as (
-      select bm.business_id, b.timezone from business_member bm inner join business b on b.id = bm.business_id
-      where bm.user_id = ${userId} and bm.role in ('OWNER', 'ADMIN', 'EMPLOYEE') limit 1
+      select bm.business_id, b.timezone from active_membership bm inner join business b on b.id = bm.business_id
+      where bm.user_id = ${userId} and bm.role = any(${rolesWith("EXPENSE_CREATE")}::member_role[]) limit 1
     ), valid_category as (
       select c.id, c.business_id from expense_category c inner join member m on m.business_id = c.business_id
       where c.id = ${input.categoryId} and c.is_active = true
@@ -123,7 +124,7 @@ export async function createExpenseForUser(userId: string, input: CreateExpenseI
   if (row) return { ok: true, id: String(row.id), linkedToCash: Boolean(row.cash_session_id) && Number(row.cash_updates) === 1 };
   const membership = await sql`
     select timezone(b.timezone, now())::date::text as today
-    from business_member bm inner join business b on b.id = bm.business_id where bm.user_id = ${userId} limit 1
+    from active_membership bm inner join business b on b.id = bm.business_id where bm.user_id = ${userId} limit 1
   `;
   if (!membership.length) return { ok: false, reason: "NO_BUSINESS" };
   return { ok: false, reason: input.expenseDate > String(membership[0].today) ? "INVALID_DATE" : "INVALID_CATEGORY" };
@@ -145,7 +146,7 @@ export async function getExpensesForUser(userId: string, filters: { start: strin
   const rows = await sql`
     select e.*, c.name as category_name, creator.name as created_by_name
     from expense e
-    inner join business_member bm on bm.business_id = e.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = e.business_id and bm.user_id = ${userId}
     inner join expense_category c on c.id = e.category_id and c.business_id = e.business_id
     inner join "user" creator on creator.id = e.created_by
     where e.expense_date between ${filters.start}::date and ${filters.end}::date
@@ -171,7 +172,7 @@ export async function getExpensesForPeriodForUser(userId: string, filters: Expen
   const rows = await sql`
     with ctx as (
       select b.id as business_id, timezone(b.timezone, now())::date as today
-      from business_member bm inner join business b on b.id = bm.business_id
+      from active_membership bm inner join business b on b.id = bm.business_id
       where bm.user_id = ${userId}
       limit 1
     ), bounds as (
@@ -214,7 +215,7 @@ export async function getExpenseForUser(userId: string, expenseId: string) {
   const rows = await sql`
     select e.*, c.name as category_name, creator.name as created_by_name
     from expense e
-    inner join business_member bm on bm.business_id = e.business_id and bm.user_id = ${userId}
+    inner join active_membership bm on bm.business_id = e.business_id and bm.user_id = ${userId}
     inner join expense_category c on c.id = e.category_id and c.business_id = e.business_id
     inner join "user" creator on creator.id = e.created_by
     where e.id = ${expenseId} limit 1
@@ -227,7 +228,7 @@ export async function getExpenseTotalsForUser(userId: string) {
   const rows = await sql`
     with context as (
       select b.id as business_id, timezone(b.timezone, now())::date as today
-      from business b inner join business_member bm on bm.business_id = b.id and bm.user_id = ${userId}
+      from business b inner join active_membership bm on bm.business_id = b.id and bm.user_id = ${userId}
     )
     select
       coalesce(sum(e.amount_cents) filter (where e.expense_date = c.today and e.status = 'ACTIVE'), 0)::bigint as today_cents,
@@ -243,7 +244,7 @@ export async function cancelExpenseForUser(userId: string, expenseId: string, re
   const sql = getSqlClient();
   const rows = await sql`
     with member as (
-      select business_id from business_member where user_id = ${userId} and role in ('OWNER', 'ADMIN') limit 1
+      select business_id from active_membership where user_id = ${userId} and role = any(${rolesWith("EXPENSE_CANCEL")}::member_role[]) limit 1
     ), target as (
       select e.* from expense e inner join member m on m.business_id = e.business_id
       where e.id = ${expenseId} and e.status = 'ACTIVE' for update of e

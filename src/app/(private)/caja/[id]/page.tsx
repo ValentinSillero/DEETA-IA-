@@ -5,9 +5,13 @@ import { notFound } from "next/navigation";
 import { CashStatement } from "@/components/cash/cash-statement";
 import { getCashSessionForUser } from "@/data/cash";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export default async function CashDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession(); const { id } = await params; const cash = await getCashSessionForUser(session.user.id, id); if (!cash) notFound();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "CASH_VIEW_HISTORY")) return <NoAccess section="el historial de caja" />;
   const date = (value: Date) => new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: cash.timezone }).format(value);
   return (
     <div className="mx-auto max-w-2xl">

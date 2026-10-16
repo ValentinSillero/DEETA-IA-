@@ -5,11 +5,15 @@ import { ProductImportWorkflow, type ProductImportView } from "@/components/prod
 import { getProductImportForUser, getProductImportRowsForUser } from "@/data/product-imports";
 import { detectProductImportMapping, productImportEditableValues, type ProductImportMapping } from "@/lib/product-imports";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Revisar importación" };
 
 export default async function ProductImportPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PRODUCT_IMPORT")) return <NoAccess section="la importación de productos" />;
   const { id } = await params;
   const batch = await getProductImportForUser(session.user.id, id);
   if (!batch) notFound();

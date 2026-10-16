@@ -9,6 +9,8 @@ import { StockStatusBadge } from "@/components/products/stock-status-badge";
 import { getMovementsForUser, getProductForUser } from "@/data/products";
 import { formatMoney, formatMovementQuantity } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
+import { NoAccess } from "@/components/no-access";
+import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Detalle del producto" };
 
@@ -47,6 +49,11 @@ function dateLabel(date: Date) {
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
+  // Bloqueo en el servidor: ocultar el enlace no alcanza.
+  if (!can(await getActiveMembership(session.user.id), "PRODUCT_VIEW")) return <NoAccess section="Productos" />;
+  const membership = await getActiveMembership(session.user.id);
+  // El costo y la ganancia por unidad son información de rentabilidad.
+  const showCost = can(membership, "PROFITABILITY_VIEW") || can(membership, "PRODUCT_PRICE_EDIT");
   const { id } = await params;
   const [record, movements] = await Promise.all([
     getProductForUser(session.user.id, id),
@@ -73,25 +80,25 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <h1 className="mt-3 page-title break-words">{item.name}</h1>
           {item.description && <p className="mt-3 max-w-2xl leading-7 text-muted">{item.description}</p>}
         </div>
-        <Link href={`/productos/${item.id}/editar`} className="button-secondary shrink-0"><Edit3 className="size-4" /> Editar información</Link>
+        {can(membership, "PRODUCT_EDIT") && <Link href={`/productos/${item.id}/editar`} className="button-secondary shrink-0"><Edit3 className="size-4" aria-hidden="true" /> Editar información</Link>}
       </div>
 
-      <section className="mt-7 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de compra</p><p className="mt-2 text-xl font-black">{formatMoney(item.costPriceCents)}</p></div>
+      <section className={`mt-7 grid gap-3 ${showCost ? "sm:grid-cols-3" : ""}`}>
+        {showCost && <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de compra</p><p className="mt-2 text-xl font-black">{formatMoney(item.costPriceCents)}</p></div>}
         <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Precio de venta</p><p className="mt-2 text-xl font-black text-mint-600">{formatMoney(item.salePriceCents)}</p></div>
-        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Ganancia estimada por unidad</p><p className={`mt-2 text-xl font-black ${margin < 0 ? "text-red-700" : ""}`}>{formatMoney(margin)}</p></div>
+        {showCost && <div className="rounded-2xl border border-line bg-white p-4 sm:p-5"><p className="text-xs font-bold text-muted">Ganancia estimada por unidad</p><p className={`mt-2 text-xl font-black ${margin < 0 ? "text-red-700" : ""}`}>{formatMoney(margin)}</p></div>}
       </section>
 
       {item.barcode && <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-muted"><Barcode className="size-4" /> {item.barcode}</p>}
 
       <div className="mt-7 grid gap-7 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start">
         <div className="space-y-5">
-          {item.isActive ? (
+          {!can(membership, "STOCK_ADJUST") ? null : item.isActive ? (
             <StockManager productId={item.id} currentStock={item.currentStock} minimumStock={item.minimumStock} />
           ) : (
             <section className="panel"><h2 className="text-lg font-black">Producto desactivado</h2><p className="mt-2 text-sm leading-6 text-muted">Reactivá el producto para volver a registrar movimientos.</p></section>
           )}
-          <ProductActiveForm productId={item.id} isActive={item.isActive} />
+          {can(membership, "PRODUCT_EDIT") && <ProductActiveForm productId={item.id} isActive={item.isActive} />}
         </div>
 
         <section className="panel min-w-0">
