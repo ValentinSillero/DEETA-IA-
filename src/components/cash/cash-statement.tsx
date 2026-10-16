@@ -6,6 +6,7 @@ type CashFigures = {
   openingAmountCents: number;
   cashSalesCents: number;
   cashExpensesCents: number;
+  cashCustomerPaymentsCents?: number;
   expectedCashCents: number;
   declaredCashCents: number | null;
   differenceCents: number | null;
@@ -24,6 +25,9 @@ export function CashStatement({ cash, size = "default" }: { cash: CashFigures; s
     <div className="ledger">
       <div className="ledger-row"><span>Efectivo inicial</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(cash.openingAmountCents)}</span></div>
       <div className="ledger-row"><span>Ventas en efectivo</span><span className="ledger-fill" aria-hidden="true" /><span>+{formatMoney(cash.cashSalesCents)}</span></div>
+      {(cash.cashCustomerPaymentsCents ?? 0) > 0 && (
+        <div className="ledger-row"><span>Cobros de fiado en efectivo</span><span className="ledger-fill" aria-hidden="true" /><span>+{formatMoney(cash.cashCustomerPaymentsCents ?? 0)}</span></div>
+      )}
       <div className="ledger-row"><span>Gastos en efectivo</span><span className="ledger-fill" aria-hidden="true" /><span>−{formatMoney(cash.cashExpensesCents)}</span></div>
       <div className="ledger-total">
         <span className="font-semibold">Debería haber</span>

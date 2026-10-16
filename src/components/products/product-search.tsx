@@ -5,7 +5,7 @@ import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function ProductSearch({ initialValue }: { initialValue: string }) {
+export function ProductSearch({ initialValue, label = "Buscar productos", placeholder = "Buscar por nombre o código" }: { initialValue: string; label?: string; placeholder?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,13 +26,14 @@ export function ProductSearch({ initialValue }: { initialValue: string }) {
 
   return (
     <label className="relative block">
-      <span className="sr-only">Buscar productos</span>
+      <span className="sr-only">{label}</span>
       <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden="true" />
       <input
         type="search"
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="Buscar por nombre o código"
+        placeholder={placeholder}
+        autoComplete="off"
         className="field-input pl-12 pr-11"
       />
       {value && (

@@ -307,9 +307,17 @@ export const productImportRow = pgTable(
   ],
 );
 
-export const paymentMethod = pgEnum("payment_method", ["CASH", "TRANSFER", "CARD"]);
+// CREDIT = venta 100 % fiada; MIXED = venta con el cobro dividido en sale_payment.
+export const paymentMethod = pgEnum("payment_method", ["CASH", "TRANSFER", "CARD", "CREDIT", "MIXED"]);
+export const salePaymentMethod = pgEnum("sale_payment_method", ["CASH", "TRANSFER", "CARD", "CREDIT"]);
+export const customerMovementType = pgEnum("customer_movement_type", [
+  "CREDIT_SALE",
+  "PAYMENT",
+  "SALE_CANCELLATION",
+  "ADJUSTMENT",
+]);
 export const saleStatus = pgEnum("sale_status", ["COMPLETED", "CANCELLED"]);
-export const incomeSource = pgEnum("income_source", ["SALE", "OTHER", "SERVICE", "MANUAL"]);
+export const incomeSource = pgEnum("income_source", ["SALE", "OTHER", "SERVICE", "MANUAL", "CUSTOMER_PAYMENT"]);
 export const incomeStatus = pgEnum("income_status", ["ACTIVE", "REVERSED"]);
 export const cashSessionStatus = pgEnum("cash_session_status", ["OPEN", "CLOSED"]);
 export const scannerPairingStatus = pgEnum("scanner_pairing_status", [
@@ -327,6 +335,34 @@ export const expensePaymentMethod = pgEnum("expense_payment_method", ["CASH", "T
 export const expenseStatus = pgEnum("expense_status", ["ACTIVE", "CANCELLED"]);
 export const aiMessageRole = pgEnum("ai_message_role", ["USER", "ASSISTANT"]);
 export const aiRequestStatus = pgEnum("ai_request_status", ["STARTED", "SUCCEEDED", "FAILED"]);
+
+export const customer = pgTable(
+  "customer",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => business.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    phone: text("phone"),
+    email: text("email"),
+    document: text("document"),
+    notes: text("notes"),
+    isActive: boolean("is_active").default(true).notNull(),
+    // Saldo materializado para listar rápido. La fuente de verdad son los
+    // movimientos: cada operación lo actualiza en la misma sentencia.
+    balanceCents: bigint("balance_cents", { mode: "number" }).default(0).notNull(),
+    lastMovementAt: timestamp("last_movement_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (table) => [
+    uniqueIndex("customer_id_business_unique").on(table.id, table.businessId),
+    index("customer_business_active_name_idx").on(table.businessId, table.isActive, table.name),
+    index("customer_business_balance_idx").on(table.businessId, table.balanceCents),
+    check("customer_name_length", sql`char_length(${table.name}) between 2 and 120`),
+    check("customer_balance_nonnegative", sql`${table.balanceCents} >= 0`),
+  ],
+);
 
 export const cashSession = pgTable(
   "cash_session",
@@ -374,6 +410,8 @@ export const sale = pgTable(
       .notNull()
       .references(() => business.id, { onDelete: "cascade" }),
     cashSessionId: text("cash_session_id"),
+    customerId: text("customer_id"),
+    clientRequestId: text("client_request_id"),
     totalCents: bigint("total_cents", { mode: "number" }).notNull(),
     paymentMethod: paymentMethod("payment_method").notNull(),
     status: saleStatus("status").default("COMPLETED").notNull(),
@@ -391,11 +429,42 @@ export const sale = pgTable(
       foreignColumns: [cashSession.id, cashSession.businessId],
       name: "sale_cash_session_business_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.customerId, table.businessId],
+      foreignColumns: [customer.id, customer.businessId],
+      name: "sale_customer_business_fk",
+    }).onDelete("restrict"),
     uniqueIndex("sale_id_business_unique").on(table.id, table.businessId),
+    uniqueIndex("sale_business_client_request_unique")
+      .on(table.businessId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} is not null`),
+    index("sale_business_customer_idx").on(table.businessId, table.customerId),
     index("sale_business_created_idx").on(table.businessId, table.createdAt),
     index("sale_business_status_created_idx").on(table.businessId, table.status, table.createdAt),
     index("sale_cash_session_idx").on(table.cashSessionId),
     check("sale_total_positive", sql`${table.totalCents} > 0`),
+  ],
+);
+
+export const salePayment = pgTable(
+  "sale_payment",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id").notNull(),
+    saleId: text("sale_id").notNull(),
+    method: salePaymentMethod("method").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.saleId, table.businessId],
+      foreignColumns: [sale.id, sale.businessId],
+      name: "sale_payment_sale_business_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("sale_payment_sale_method_unique").on(table.saleId, table.method),
+    index("sale_payment_business_method_idx").on(table.businessId, table.method),
+    check("sale_payment_amount_positive", sql`${table.amountCents} > 0`),
   ],
 );
 
@@ -462,10 +531,69 @@ export const income = pgTable(
       foreignColumns: [cashSession.id, cashSession.businessId],
       name: "income_cash_session_business_fk",
     }).onDelete("restrict"),
-    uniqueIndex("income_sale_unique").on(table.saleId).where(sql`${table.saleId} is not null`),
+    // Una venta con cobro dividido genera un ingreso por medio de pago.
+    uniqueIndex("income_sale_method_unique").on(table.saleId, table.paymentMethod).where(sql`${table.saleId} is not null`),
     index("income_business_created_idx").on(table.businessId, table.createdAt),
     index("income_cash_session_idx").on(table.cashSessionId),
     check("income_amount_positive", sql`${table.amountCents} > 0`),
+  ],
+);
+
+export const customerAccountMovement = pgTable(
+  "customer_account_movement",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    type: customerMovementType("type").notNull(),
+    // Convención única: positivo aumenta la deuda, negativo la reduce.
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    balanceAfterCents: bigint("balance_after_cents", { mode: "number" }).notNull(),
+    saleId: text("sale_id"),
+    paymentMethod: paymentMethod("payment_method"),
+    cashSessionId: text("cash_session_id"),
+    note: text("note"),
+    idempotencyKey: text("idempotency_key"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.customerId, table.businessId],
+      foreignColumns: [customer.id, customer.businessId],
+      name: "customer_movement_customer_business_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.saleId, table.businessId],
+      foreignColumns: [sale.id, sale.businessId],
+      name: "customer_movement_sale_business_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.cashSessionId, table.businessId],
+      foreignColumns: [cashSession.id, cashSession.businessId],
+      name: "customer_movement_cash_session_business_fk",
+    }).onDelete("restrict"),
+    index("customer_movement_business_customer_created_idx").on(table.businessId, table.customerId, table.createdAt),
+    index("customer_movement_business_type_created_idx").on(table.businessId, table.type, table.createdAt),
+    index("customer_movement_sale_idx").on(table.saleId),
+    index("customer_movement_cash_session_idx").on(table.cashSessionId),
+    uniqueIndex("customer_movement_business_idempotency_unique")
+      .on(table.businessId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+    check("customer_movement_balance_nonnegative", sql`${table.balanceAfterCents} >= 0`),
+    check(
+      "customer_movement_sign_by_type",
+      sql`(${table.type} = 'CREDIT_SALE' and ${table.amountCents} > 0)
+        or (${table.type} in ('PAYMENT', 'SALE_CANCELLATION') and ${table.amountCents} < 0)
+        or (${table.type} = 'ADJUSTMENT' and ${table.amountCents} <> 0)`,
+    ),
+    check(
+      "customer_movement_payment_method",
+      sql`(${table.type} = 'PAYMENT' and ${table.paymentMethod} in ('CASH', 'TRANSFER', 'CARD'))
+        or (${table.type} <> 'PAYMENT' and ${table.paymentMethod} is null)`,
+    ),
   ],
 );
 
@@ -685,6 +813,10 @@ export type PaymentMethod = (typeof paymentMethod.enumValues)[number];
 export type Sale = typeof sale.$inferSelect;
 export type SaleItem = typeof saleItem.$inferSelect;
 export type CashSession = typeof cashSession.$inferSelect;
+export type Customer = typeof customer.$inferSelect;
+export type CustomerAccountMovement = typeof customerAccountMovement.$inferSelect;
+export type CustomerMovementType = (typeof customerMovementType.enumValues)[number];
+export type SalePaymentMethod = (typeof salePaymentMethod.enumValues)[number];
 export type Income = typeof income.$inferSelect;
 export type ScannerPairingSession = typeof scannerPairingSession.$inferSelect;
 export type ScannerScanEvent = typeof scannerScanEvent.$inferSelect;

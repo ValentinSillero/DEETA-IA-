@@ -1,5 +1,7 @@
 import "server-only";
 
+import { z } from "zod";
+
 import { getSqlClient } from "@/db";
 import { getFinancialAnalyticsForRangesForUser } from "@/data/analytics";
 import { getIntelligentAnalyticsForUser, type IntelligentProduct } from "@/data/intelligent-analytics";
@@ -24,6 +26,9 @@ export const DEETA_AI_TOOLS: AiToolDefinition[] = [
   { type: "function", name: "get_product_sales_ranking", description: "Ranking determinístico de productos por unidades o facturación, incluyendo productos sin ventas. Distingue menor venta de baja rotación.", parameters: { type: "object", properties: { ...periodProperties, ranking: { type: "string", enum: ["MOST_UNITS", "LEAST_UNITS", "MOST_REVENUE", "LEAST_REVENUE", "NO_SALES"] }, limit: { type: "number", enum: [1, 5, 8] } }, required: ["kind", "month", "ranking", "limit"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_inventory_analysis", description: "Stock actual, faltantes, productos bajo mínimo, reposición, baja rotación o exceso. Devuelve productos y cifras, no solo conteos.", parameters: { type: "object", properties: { focus: { type: "string", enum: ["REORDER", "SLOW", "EXCESS", "LOW_STOCK", "LOWEST_STOCK", "OUT_OF_STOCK", "BELOW_MINIMUM"] }, days: { type: "number", enum: [7, 30, 60] } }, required: ["focus", "days"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_expense_breakdown", description: "Gastos por categoría y comparación anterior.", parameters: { type: "object", properties: periodProperties, required: ["kind", "month"], additionalProperties: false }, strict: true },
+  { type: "function", name: "get_customer_balances", description: "Solo lectura. Saldos de clientes con fiado: cuánto le deben al negocio, quién debe más o quién hace más tiempo que no paga.", parameters: { type: "object", properties: { focus: { type: "string", enum: ["DEBTORS", "TOP_DEBTOR", "OLDEST_UNPAID"] } }, required: ["focus"], additionalProperties: false }, strict: true },
+  { type: "function", name: "get_customer_account", description: "Solo lectura. Saldo, último pago y compras fiadas pendientes de un cliente mencionado por nombre.", parameters: { type: "object", properties: { customerReference: { type: "string", maxLength: 120 } }, required: ["customerReference"], additionalProperties: false }, strict: true },
+  { type: "function", name: "get_customer_payments", description: "Solo lectura. Pagos de fiado recibidos de clientes en el período, por medio de pago.", parameters: { type: "object", properties: periodProperties, required: ["kind", "month"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_cash_summary", description: "Estado y efectivo esperado de la caja actual.", parameters: { type: "object", properties: {}, required: [], additionalProperties: false }, strict: true },
   { type: "function", name: "get_product_performance", description: "Ventas y margen de un producto mencionado.", parameters: { type: "object", properties: { productReference: { type: "string", maxLength: 120 }, ...periodProperties }, required: ["productReference", "kind", "month"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_sales_patterns", description: "Días, horarios o tendencia de ventas.", parameters: { type: "object", properties: { ...periodProperties, focus: { type: "string", enum: ["DAYS", "HOURS", "TREND"] } }, required: ["kind", "month", "focus"], additionalProperties: false }, strict: true },
@@ -517,6 +522,142 @@ async function getSalesPatterns(userId: string, rawArguments: unknown) {
   return { focus: parsed.focus, period, sufficientData: analytics.evolution.length > 1, reason: analytics.evolution.length > 1 ? null : "Todavía no hay suficientes días para mostrar una tendencia.", comparisonsPercent: analytics.financial.comparisons, daily: analytics.evolution.slice(-31) };
 }
 
+
+// ---------------------------------------------------------------------------
+// Cuenta corriente de clientes: solo lectura. DEETA AI puede consultar saldos
+// y pagos, pero no registrar pagos, modificar clientes, perdonar deuda ni
+// hacer ajustes.
+
+const customerBalancesSchema = z.object({ focus: z.enum(["DEBTORS", "TOP_DEBTOR", "OLDEST_UNPAID"]) });
+const customerAccountSchema = z.object({ customerReference: z.string().trim().min(2).max(120) });
+
+function shortDate(value: unknown, timezone: string) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: timezone }).format(new Date(String(value)));
+}
+
+function daysSince(value: unknown) {
+  if (!value) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(String(value)).getTime()) / 86_400_000));
+}
+
+async function getCustomerBalances(userId: string, rawArguments: unknown) {
+  const { focus } = customerBalancesSchema.parse(rawArguments);
+  const context = await getAiContextForUser(userId);
+  if (!context) throw new Error("AI_FORBIDDEN");
+  const sql = getSqlClient();
+  const rows = await sql`
+    select c.name, c.balance_cents, c.last_movement_at,
+      (select max(m.created_at) from customer_account_movement m
+        where m.customer_id = c.id and m.business_id = c.business_id and m.type = 'PAYMENT') as last_payment_at,
+      (select min(m.created_at) from customer_account_movement m
+        where m.customer_id = c.id and m.business_id = c.business_id and m.amount_cents > 0) as first_debt_at
+    from customer c
+    where c.business_id = ${context.businessId} and c.balance_cents > 0
+  `;
+  const customers = rows.map((row) => {
+    const sinceValue = row.last_payment_at ?? row.first_debt_at;
+    return {
+      name: String(row.name),
+      balanceCents: Number(row.balance_cents),
+      balance: formatMoney(Number(row.balance_cents)),
+      lastMovementDate: shortDate(row.last_movement_at, context.timezone),
+      lastPaymentDate: shortDate(row.last_payment_at, context.timezone),
+      daysWithoutPayment: daysSince(sinceValue),
+    };
+  });
+  const sorted = focus === "OLDEST_UNPAID"
+    ? [...customers].sort((left, right) => (right.daysWithoutPayment ?? 0) - (left.daysWithoutPayment ?? 0) || right.balanceCents - left.balanceCents)
+    : [...customers].sort((left, right) => right.balanceCents - left.balanceCents);
+  const totalPendingCents = customers.reduce((total, customer) => total + customer.balanceCents, 0);
+  return {
+    focus,
+    totalPendingCents,
+    totalPending: formatMoney(totalPendingCents),
+    debtors: customers.length,
+    customers: sorted.slice(0, focus === "DEBTORS" ? 8 : 3),
+  };
+}
+
+async function getCustomerAccount(userId: string, rawArguments: unknown) {
+  const { customerReference } = customerAccountSchema.parse(rawArguments);
+  const context = await getAiContextForUser(userId);
+  if (!context) throw new Error("AI_FORBIDDEN");
+  const sql = getSqlClient();
+  const pattern = `%${customerReference.replace(/[%_]/g, "")}%`;
+  const matches = await sql`
+    select c.id, c.name, c.balance_cents, c.last_movement_at
+    from customer c
+    where c.business_id = ${context.businessId} and c.name ilike ${pattern}
+    order by c.balance_cents desc, c.name asc
+    limit 3
+  `;
+  if (!matches[0]) return { customerReference, found: false, matches: [] as string[], customer: null };
+  const customer = matches[0];
+  // "Compras pendientes": ventas fiadas desde la última vez que el cliente
+  // quedó al día (saldo cero).
+  const pending = await sql`
+    with last_zero as (
+      select max(m.created_at) as at from customer_account_movement m
+      where m.customer_id = ${customer.id} and m.business_id = ${context.businessId} and m.balance_after_cents = 0
+    )
+    select m.created_at, m.amount_cents, m.sale_id,
+      (select string_agg(si.quantity || ' × ' || si.product_name_snapshot, ', ' order by si.product_name_snapshot)
+        from sale_item si where si.sale_id = m.sale_id and si.business_id = m.business_id) as items
+    from customer_account_movement m, last_zero lz
+    where m.customer_id = ${customer.id} and m.business_id = ${context.businessId}
+      and m.type = 'CREDIT_SALE'
+      and (lz.at is null or m.created_at > lz.at)
+    order by m.created_at desc
+    limit 8
+  `;
+  const lastPayment = await sql`
+    select m.created_at, m.amount_cents from customer_account_movement m
+    where m.customer_id = ${customer.id} and m.business_id = ${context.businessId} and m.type = 'PAYMENT'
+    order by m.created_at desc limit 1
+  `;
+  return {
+    customerReference,
+    found: true,
+    matches: matches.map((match) => String(match.name)),
+    customer: {
+      name: String(customer.name),
+      balanceCents: Number(customer.balance_cents),
+      balance: formatMoney(Number(customer.balance_cents)),
+      lastMovementDate: shortDate(customer.last_movement_at, context.timezone),
+      lastPayment: lastPayment[0] ? { date: shortDate(lastPayment[0].created_at, context.timezone), amount: formatMoney(-Number(lastPayment[0].amount_cents)) } : null,
+      pendingPurchases: Number(customer.balance_cents) > 0 ? pending.map((row) => ({
+        date: shortDate(row.created_at, context.timezone),
+        amountCents: Number(row.amount_cents),
+        amount: formatMoney(Number(row.amount_cents)),
+        items: row.items ? String(row.items) : null,
+      })) : [],
+    },
+  };
+}
+
+async function getCustomerPayments(userId: string, rawArguments: unknown) {
+  const { selection, context, ranges } = await resolveToolPeriod(userId, rawArguments);
+  const sql = getSqlClient();
+  const rows = await sql`
+    select m.payment_method, count(*)::int as operations, coalesce(sum(-m.amount_cents), 0)::bigint as amount_cents
+    from customer_account_movement m
+    where m.business_id = ${context.businessId} and m.type = 'PAYMENT'
+      and timezone(${context.timezone}, m.created_at)::date between ${ranges.current.start}::date and ${ranges.current.end}::date
+    group by m.payment_method
+    order by amount_cents desc
+  `;
+  const labels: Record<string, string> = { CASH: "Efectivo", TRANSFER: "Transferencia", CARD: "Tarjeta" };
+  const totalCents = rows.reduce((total, row) => total + Number(row.amount_cents), 0);
+  return {
+    period: periodLabel(selection, ranges.current.start, ranges.current.end),
+    totalCents,
+    total: formatMoney(totalCents),
+    operations: rows.reduce((total, row) => total + Number(row.operations), 0),
+    byMethod: rows.map((row) => ({ method: labels[String(row.payment_method)] ?? String(row.payment_method), amountCents: Number(row.amount_cents), amount: formatMoney(Number(row.amount_cents)), operations: Number(row.operations) })),
+  };
+}
+
 export function createAiToolExecutor(userId: string) {
   return async (name: string, rawArguments: unknown) => {
     if (name === "get_period_summary") return getPeriodSummary(userId, rawArguments);
@@ -529,6 +670,9 @@ export function createAiToolExecutor(userId: string) {
     if (name === "get_slow_moving_products") return getSlowMovingProducts(userId, rawArguments);
     if (name === "get_expense_breakdown") return getExpenseBreakdown(userId, rawArguments);
     if (name === "get_cash_summary") return getCashSummary(userId);
+    if (name === "get_customer_balances") return getCustomerBalances(userId, rawArguments);
+    if (name === "get_customer_account") return getCustomerAccount(userId, rawArguments);
+    if (name === "get_customer_payments") return getCustomerPayments(userId, rawArguments);
     if (name === "get_product_performance") return getProductPerformance(userId, rawArguments);
     if (name === "get_sales_patterns") return getSalesPatterns(userId, rawArguments);
     if (name === "getSalesTrends") {

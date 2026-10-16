@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, Camera, CreditCard, Minus, PackagePlus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { Camera, Minus, PackagePlus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,29 +8,29 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { lookupBarcodeAction } from "@/actions/scanner";
 import { completeSaleAction } from "@/actions/sales";
+import { SaleCheckout, type CheckoutPayload } from "@/components/sales/sale-checkout";
 import { RemoteScannerPanel } from "@/components/scanner/remote-scanner-panel";
+import type { CustomerListItem } from "@/data/customers";
 import type { ScannerProductDto } from "@/data/scanner";
 import type { SaleProductDto } from "@/data/sales";
 import type { ScannedBarcode } from "@/lib/barcode";
 import { formatMoney } from "@/lib/inventory";
-import { parseMoneyToCents } from "@/lib/product-validations";
 
 type CartLine = SaleProductDto & { quantity: number };
-type PaymentMethod = "CASH" | "TRANSFER" | "CARD";
 
 const BarcodeScanner = dynamic(
   () => import("@/components/scanner/barcode-scanner").then((module) => module.BarcodeScanner),
   { ssr: false },
 );
 
-export function SaleComposer({ products, hasOpenCash }: { products: SaleProductDto[]; hasOpenCash: boolean }) {
+export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: { products: SaleProductDto[]; hasOpenCash: boolean; initialCustomer?: CustomerListItem | null }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [checkout, setCheckout] = useState(false);
   const [mobileCart, setMobileCart] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
-  const [received, setReceived] = useState("");
+  // Una clave por cobro: un doble toque en "Confirmar venta" no duplica la venta.
+  const [clientRequestId, setClientRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string>();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanNotice, setScanNotice] = useState<{ message: string; barcode?: string; missing?: boolean }>();
@@ -44,8 +44,6 @@ export function SaleComposer({ products, hasOpenCash }: { products: SaleProductD
   }, [products, search]);
   const totalCents = cart.reduce((total, line) => total + line.salePriceCents * line.quantity, 0);
   const units = cart.reduce((total, line) => total + line.quantity, 0);
-  const receivedCents = received ? parseMoneyToCents(received) : Number.NaN;
-  const changeCents = Number.isFinite(receivedCents) ? receivedCents - totalCents : null;
 
   useEffect(() => {
     if (!mobileCart && !checkout) return;
@@ -92,13 +90,20 @@ export function SaleComposer({ products, hasOpenCash }: { products: SaleProductD
       .filter((line) => line.quantity > 0));
   }
 
-  function charge() {
+  function openCheckout() {
+    setClientRequestId(crypto.randomUUID());
+    setCheckout(true);
+  }
+
+  function charge(payload: CheckoutPayload) {
     setError(undefined);
     startTransition(async () => {
       const result = await completeSaleAction({
         items: cart.map((line) => ({ productId: line.id, quantity: line.quantity })),
-        paymentMethod,
-        receivedCashCents: paymentMethod === "CASH" && Number.isFinite(receivedCents) ? receivedCents : null,
+        payments: payload.payments,
+        receivedCashCents: payload.receivedCashCents,
+        customerId: payload.customerId,
+        clientRequestId,
         pairingSessionId: pairingId,
       });
       if (!result.ok) return setError(result.message);
@@ -125,7 +130,7 @@ export function SaleComposer({ products, hasOpenCash }: { products: SaleProductD
           ))}
         </div>
       )}
-      <div className="mt-auto shrink-0 bg-surface pt-3"><div className="ledger-total"><p className="font-semibold">Total</p><p className="figure min-w-0 break-words text-right text-[2rem] leading-none">{formatMoney(totalCents)}</p></div><button type="button" onClick={() => setCheckout(true)} disabled={!cart.length} className="button-brand mt-4 min-h-14 w-full text-base">Cobrar venta</button></div>
+      <div className="mt-auto shrink-0 bg-surface pt-3"><div className="ledger-total"><p className="font-semibold">Total</p><p className="figure min-w-0 break-words text-right text-[2rem] leading-none">{formatMoney(totalCents)}</p></div><button type="button" onClick={openCheckout} disabled={!cart.length} className="button-brand mt-4 min-h-14 w-full text-base">Cobrar venta</button></div>
     </div>
   );
 
@@ -148,15 +153,10 @@ export function SaleComposer({ products, hasOpenCash }: { products: SaleProductD
         <aside className="panel sticky top-6 hidden min-h-0 overflow-hidden lg:flex">{cartContent}</aside>
       </div>
 
-      {cart.length > 0 ? <button type="button" onClick={() => setMobileCart(true)} className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 z-30 flex min-h-16 items-center justify-between gap-3 rounded-xl border border-white/15 bg-ink px-4 text-white lg:hidden" aria-label={`Ver carrito: ${units} ${units === 1 ? "producto" : "productos"}, total ${formatMoney(totalCents)}`}><span className="min-w-0 text-left font-black"><ShoppingCart className="mr-2 inline size-5" aria-hidden="true" />{units} {units === 1 ? "producto" : "productos"}</span><span className="shrink-0 text-right"><span className="block text-lg font-black">{formatMoney(totalCents)}</span><span className="block text-xs font-bold text-white/70">Ver carrito</span></span></button> : null}
+      {cart.length > 0 ? <button type="button" onClick={() => setMobileCart(true)} className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 md:left-[260px] z-30 flex min-h-16 items-center justify-between gap-3 rounded-xl border border-white/15 bg-ink px-4 text-white lg:hidden" aria-label={`Ver carrito: ${units} ${units === 1 ? "producto" : "productos"}, total ${formatMoney(totalCents)}`}><span className="min-w-0 text-left font-black"><ShoppingCart className="mr-2 inline size-5" aria-hidden="true" />{units} {units === 1 ? "producto" : "productos"}</span><span className="shrink-0 text-right"><span className="block text-lg font-black">{formatMoney(totalCents)}</span><span className="block text-xs font-bold text-white/70">Ver carrito</span></span></button> : null}
       {mobileCart ? <div className="fixed inset-0 z-50 flex items-end overflow-hidden overscroll-none bg-ink/45 lg:hidden" onMouseDown={(event) => event.currentTarget === event.target && setMobileCart(false)}><div className="flex h-[min(88dvh,720px)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-surface p-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="dialog" aria-modal="true" aria-label="Carrito de venta">{cartContent}</div></div> : null}
 
-      {checkout && <div className="fixed inset-0 z-[60] grid place-items-end bg-ink/50 p-0 sm:place-items-center sm:p-5"><div className="w-full max-w-lg rounded-t-2xl bg-surface p-5 pb-[max(20px,env(safe-area-inset-bottom))] sm:rounded-2xl sm:p-7" role="dialog" aria-modal="true" aria-labelledby="checkout-title"><div className="flex items-start justify-between"><div><p className="section-label">Cobrar</p><h2 id="checkout-title" className="figure mt-1 text-[2.25rem] leading-none">{formatMoney(totalCents)}</h2></div><button type="button" onClick={() => setCheckout(false)} className="grid size-11 place-items-center rounded-xl border border-line" aria-label="Cerrar cobro"><X className="size-5" aria-hidden="true" /></button></div>
-        <fieldset className="mt-6"><legend className="font-semibold">¿Cómo pagó?</legend><div className="mt-3 grid grid-cols-3 gap-2">{([{ value: "CASH", label: "Efectivo", icon: Banknote }, { value: "TRANSFER", label: "Transferencia", icon: Banknote }, { value: "CARD", label: "Tarjeta", icon: CreditCard }] as const).map(({ value, label, icon: Icon }) => <button key={value} type="button" onClick={() => { setPaymentMethod(value); setError(undefined); }} aria-pressed={paymentMethod === value} className={`min-h-16 rounded-lg border px-2 text-sm font-semibold transition-colors ${paymentMethod === value ? "border-ink bg-ink text-white" : "border-line-strong hover:bg-surface-2"}`}><Icon className="mx-auto mb-2 size-5" />{label}</button>)}</div></fieldset>
-        {paymentMethod === "CASH" && (!hasOpenCash ? <div className="notice-error mt-5">Primero tenés que abrir la caja. <Link href="/caja" className="underline">Abrir caja</Link></div> : <div className="mt-5"><label className="field-label">Recibí<input value={received} onChange={(event) => setReceived(event.target.value)} inputMode="decimal" className="field-input" placeholder="$ 0" /></label>{changeCents !== null && changeCents >= 0 && <p className="mt-3 rounded-2xl bg-accent-soft p-4 font-black text-success">Vuelto: {formatMoney(changeCents)}</p>}</div>)}
-        {error && <p className="notice-error mt-5">{error}</p>}
-        <button type="button" onClick={charge} disabled={pending || (paymentMethod === "CASH" && (!hasOpenCash || changeCents === null || changeCents < 0))} className="button-brand mt-6 min-h-14 w-full text-base">{pending ? "Cobrando…" : "Confirmar venta"}</button>
-      </div></div>}
+      {checkout && <SaleCheckout totalCents={totalCents} hasOpenCash={hasOpenCash} initialCustomer={initialCustomer} pending={pending} error={error} onClose={() => { setCheckout(false); setError(undefined); }} onConfirm={charge} />}
       {scannerOpen ? <BarcodeScanner open onClose={() => setScannerOpen(false)} onDetected={scanned} /> : null}
     </>
   );

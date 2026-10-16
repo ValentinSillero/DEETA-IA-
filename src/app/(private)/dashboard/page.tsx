@@ -7,6 +7,7 @@ import {
   ReceiptText,
   Settings,
   TriangleAlert,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -17,6 +18,7 @@ import { GettingStarted } from "@/components/onboarding/getting-started";
 import { getFinancialSummaryForUser } from "@/data/analytics";
 import { getBusinessForUser } from "@/data/businesses";
 import { getOpenCashSessionForUser } from "@/data/cash";
+import { getCustomerDebtSummaryForUser } from "@/data/customers";
 import { getDashboardDetectionsForUser } from "@/data/intelligent-analytics";
 import { getOnboardingPlanForUser } from "@/data/onboarding";
 import { getProductCountsForUser } from "@/data/products";
@@ -45,13 +47,14 @@ function AttentionRow({ href, icon: Icon, title, detail, tone, status }: { href:
 
 export default async function DashboardPage() {
   const session = await requireSession();
-  const [productCounts, analytics, openCash, businessContext, detections, onboarding] = await Promise.all([
+  const [productCounts, analytics, openCash, businessContext, detections, onboarding, debts] = await Promise.all([
     getProductCountsForUser(session.user.id),
     getFinancialSummaryForUser(session.user.id, "TODAY"),
     getOpenCashSessionForUser(session.user.id),
     getBusinessForUser(session.user.id),
     getDashboardDetectionsForUser(session.user.id),
     getOnboardingPlanForUser(session.user.id),
+    getCustomerDebtSummaryForUser(session.user.id),
   ]);
   if (!analytics) return null;
   const hasSales = onboarding?.state.signals.hasSales ?? true;
@@ -97,6 +100,7 @@ export default async function DashboardPage() {
               <div className="ledger-row"><span>Efectivo</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.cashCents)}</span></div>
               <div className="ledger-row"><span>Transferencias</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.transferCents)}</span></div>
               <div className="ledger-row"><span>Tarjetas</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.cardCents)}</span></div>
+              {payments.creditCents > 0 && <div className="ledger-row"><span>Fiado (no entra a caja)</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payments.creditCents)}</span></div>}
             </div>
           </div>
           <div className="border-t border-line bg-surface-2/60 px-5 py-5 sm:px-6 sm:py-6 lg:border-l lg:border-t-0">
@@ -119,6 +123,7 @@ export default async function DashboardPage() {
           <h2 id="atender-titulo" className="section-title mb-3">Para atender</h2>
           <div className="list-surface">
             <AttentionRow href="/caja" icon={CircleDollarSign} title={openCash ? "Caja abierta" : "Caja cerrada"} detail={openCash ? `Efectivo esperado: ${formatMoney(openCash.expectedCashCents)}` : "Abrila antes de cobrar en efectivo."} tone={openCash ? "ok" : "warn"} status={openCash ? "En curso" : "Pendiente"} />
+            {debts.pendingCents > 0 && <AttentionRow href="/clientes?estado=debt" icon={UsersRound} title={`Te deben ${formatMoney(debts.pendingCents)}`} detail={`${debts.debtors} ${debts.debtors === 1 ? "cliente con deuda" : "clientes con deuda"}.`} tone="warn" status="Fiado" />}
             {hasProducts ? (
               <AttentionRow href="/productos?estado=low" icon={TriangleAlert} title={productCounts.low === 0 ? "Stock sin alertas" : `${productCounts.low} ${productCounts.low === 1 ? "producto con poco stock" : "productos con poco stock"}`} detail={urgent > 0 ? `${urgent} ${urgent === 1 ? "necesita" : "necesitan"} reposición pronto.` : "Revisá lo que conviene reponer."} tone={productCounts.low > 0 || urgent > 0 ? "warn" : "ok"} status={productCounts.low > 0 || urgent > 0 ? "Revisar" : "Al día"} />
             ) : (

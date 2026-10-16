@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { CancelSaleForm } from "@/components/sales/cancel-sale-form";
 import { getSaleForUser } from "@/data/sales";
 import { formatMoney } from "@/lib/inventory";
-import { PAYMENT_METHOD_LABELS, saleDisplayNumber } from "@/lib/sales";
+import { PAYMENT_METHOD_LABELS, SALE_PAYMENT_LABELS, saleDisplayNumber } from "@/lib/sales";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Detalle de venta" };
@@ -50,9 +50,25 @@ export default async function SaleDetailPage({ params, searchParams }: { params:
             <p className={`figure text-[2rem] leading-none ${completed ? "" : "text-muted line-through"}`}>{formatMoney(sale.totalCents)}</p>
           </div>
         </div>
+        {sale.payments.length > 1 && (
+          <div className="border-t border-line px-5 py-3 sm:px-6">
+            <p className="text-sm text-muted">Cómo se cobró</p>
+            <div className="ledger mt-1 text-sm">
+              {sale.payments.map((payment) => (
+                <div key={payment.method} className="ledger-row"><span>{SALE_PAYMENT_LABELS[payment.method]}</span><span className="ledger-fill" aria-hidden="true" /><span>{formatMoney(payment.amountCents)}</span></div>
+              ))}
+            </div>
+          </div>
+        )}
         <dl className="grid grid-cols-2 border-t border-line text-sm">
           <div className="border-r border-line px-5 py-3.5 sm:px-6"><dt className="text-muted">Pago</dt><dd className="mt-0.5 font-semibold">{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</dd></div>
           <div className="px-5 py-3.5 sm:px-6"><dt className="text-muted">Realizada por</dt><dd className="mt-0.5 truncate font-semibold">{sale.createdByName}</dd></div>
+          {sale.customer && (
+            <div className="col-span-2 border-t border-line px-5 py-3.5 sm:px-6">
+              <dt className="text-muted">Cliente</dt>
+              <dd className="mt-0.5 font-semibold"><Link href={`/clientes/${sale.customer.id}`} className="underline decoration-line-strong underline-offset-4 hover:decoration-ink">{sale.customer.name}</Link>{sale.creditCents > 0 && <span className="font-normal text-muted"> · quedó debiendo {formatMoney(sale.creditCents)}</span>}</dd>
+            </div>
+          )}
         </dl>
       </article>
 

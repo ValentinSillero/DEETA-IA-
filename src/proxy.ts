@@ -21,6 +21,7 @@ export const config = {
     "/productos/:path*",
     "/vender/:path*",
     "/ventas/:path*",
+    "/clientes/:path*",
     "/caja/:path*",
     "/scanner/:path*",
     "/deeta-ai/:path*",

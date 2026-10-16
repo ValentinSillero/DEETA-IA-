@@ -44,6 +44,7 @@ export default async function SalesPage() {
                     <span className="order-3 col-span-2 truncate text-sm text-muted md:order-none md:col-span-1 md:text-[0.95rem] md:text-ink">
                       {formatDate(sale.createdAt)}
                       <span className="md:hidden"> · {PAYMENT_METHOD_LABELS[sale.paymentMethod]} · {sale.unitCount} u.</span>
+                      {sale.customerName && <span className="block truncate text-sm text-muted">{sale.customerName}</span>}
                     </span>
                     <span className="hidden text-sm md:block">{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</span>
                     <span className="hidden text-right tabular-nums md:block">{sale.unitCount}</span>

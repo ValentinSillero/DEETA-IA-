@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "@/db/schema";
+import type { PaymentMethod, SalePaymentMethod } from "@/db/schema";
 
 export function stockAfterSale(currentStock: number, quantity: number) {
   if (!Number.isInteger(quantity) || quantity <= 0) throw new Error("INVALID_QUANTITY");
@@ -47,4 +47,37 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
   TRANSFER: "Transferencia",
   CARD: "Tarjeta",
+  CREDIT: "Fiado",
+  MIXED: "Pago dividido",
 };
+
+export const SALE_PAYMENT_LABELS: Record<SalePaymentMethod, string> = {
+  CASH: "Efectivo",
+  TRANSFER: "Transferencia",
+  CARD: "Tarjeta",
+  CREDIT: "Fiado",
+};
+
+export type SalePaymentLine = { method: SalePaymentMethod; amountCents: number };
+
+// Separa lo vendido de lo cobrado: el fiado es venta, pero no entra a caja.
+export function summarizeSalePayments(payments: SalePaymentLine[]) {
+  const amount = (method: SalePaymentMethod) => payments.filter((line) => line.method === method).reduce((total, line) => total + line.amountCents, 0);
+  const cashCents = amount("CASH");
+  const creditCents = amount("CREDIT");
+  const totalCents = payments.reduce((total, line) => total + line.amountCents, 0);
+  const primaryMethod: PaymentMethod = payments.length === 1 ? payments[0].method : "MIXED";
+  return { cashCents, creditCents, collectedCents: totalCents - creditCents, totalCents, primaryMethod };
+}
+
+export type SalePaymentIssue = "EMPTY" | "DUPLICATE_METHOD" | "INVALID_AMOUNT" | "TOTAL_MISMATCH" | "CUSTOMER_REQUIRED";
+
+export function salePaymentIssue(totalCents: number, payments: SalePaymentLine[], customerId: string | null): SalePaymentIssue | null {
+  if (payments.length === 0) return "EMPTY";
+  if (new Set(payments.map((line) => line.method)).size !== payments.length) return "DUPLICATE_METHOD";
+  if (payments.some((line) => !Number.isInteger(line.amountCents) || line.amountCents <= 0)) return "INVALID_AMOUNT";
+  const summary = summarizeSalePayments(payments);
+  if (summary.totalCents !== totalCents) return "TOTAL_MISMATCH";
+  if (summary.creditCents > 0 && !customerId) return "CUSTOMER_REQUIRED";
+  return null;
+}

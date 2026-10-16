@@ -58,6 +58,9 @@ describe("onboarding derivado de datos reales", () => {
     expect(result.completed).toBe(2);
     expect(result.mode).toBe("checklist");
     expect(result.extras.map((extra) => extra.id)).toContain("ai");
+    // El fiado aparece como función secundaria, nunca como paso obligatorio.
+    expect(result.extras.map((extra) => extra.id)).toContain("customers");
+    expect(result.steps.map((step) => step.id)).toEqual(["products", "cash", "sale"]);
   });
 
   it("al completar todo muestra 'Todo listo' unos días y después desaparece", () => {

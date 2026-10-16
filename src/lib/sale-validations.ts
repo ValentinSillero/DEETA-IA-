@@ -25,19 +25,40 @@ export const cartItemSchema = z.object({
   quantity: z.number().int().positive().max(1_000_000),
 });
 
+export const salePaymentLineSchema = z.object({
+  method: z.enum(["CASH", "TRANSFER", "CARD", "CREDIT"]),
+  amountCents: z.number().int().positive().max(100_000_000_000),
+});
+
+// Acepta el formato anterior (un solo medio por el total) o el nuevo, con el
+// cobro dividido y fiado. El total real siempre se calcula en el servidor.
 export const completeSaleSchema = z
   .object({
     items: z.array(cartItemSchema).min(1).max(200),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "CARD"]),
+    paymentMethod: z.enum(["CASH", "TRANSFER", "CARD"]).optional(),
+    payments: z.array(salePaymentLineSchema).min(1).max(4).optional(),
     receivedCashCents: z.number().int().nonnegative().nullable(),
+    customerId: z.string().uuid().nullable().optional(),
+    clientRequestId: z.string().uuid().nullable().optional(),
     pairingSessionId: z.string().uuid().nullable().optional(),
   })
   .superRefine((value, context) => {
     if (new Set(value.items.map((item) => item.productId)).size !== value.items.length) {
       context.addIssue({ code: "custom", message: "Hay productos repetidos en el carrito." });
     }
-    if (value.paymentMethod === "CASH" && value.receivedCashCents === null) {
+    if (Boolean(value.paymentMethod) === Boolean(value.payments)) {
+      context.addIssue({ code: "custom", message: "Elegí cómo se paga la venta." });
+      return;
+    }
+    if (value.payments && new Set(value.payments.map((line) => line.method)).size !== value.payments.length) {
+      context.addIssue({ code: "custom", message: "Cada medio de pago puede aparecer una sola vez." });
+    }
+    const paysCash = value.paymentMethod === "CASH" || Boolean(value.payments?.some((line) => line.method === "CASH"));
+    if (paysCash && value.receivedCashCents === null) {
       context.addIssue({ code: "custom", message: "Ingresá cuánto efectivo recibiste." });
+    }
+    if (value.payments?.some((line) => line.method === "CREDIT") && !value.customerId) {
+      context.addIssue({ code: "custom", path: ["customerId"], message: "Elegí un cliente para registrar la deuda." });
     }
   });
 

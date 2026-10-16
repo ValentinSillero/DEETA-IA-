@@ -30,7 +30,7 @@ export type OnboardingStep = {
 };
 
 export type OnboardingExtra = {
-  id: "expenses" | "ai";
+  id: "expenses" | "ai" | "customers";
   title: string;
   description: string;
   action: OnboardingAction;
@@ -139,6 +139,14 @@ export function buildOnboardingPlan(input: {
       title: "Registrá tus gastos",
       description: "Así DEETA puede calcular mejor el resultado de tu negocio.",
       action: { label: "Anotar gasto", href: "/gastos/nuevo", variant: "secondary" },
+    });
+  }
+  if (signals.hasSales) {
+    extras.push({
+      id: "customers",
+      title: "¿Vendés fiado?",
+      description: "Podés llevar las cuentas de tus clientes desde DEETA.",
+      action: { label: "Ver clientes", href: "/clientes", variant: "secondary" },
     });
   }
   if (canUseAi(role) && signals.hasSales) {

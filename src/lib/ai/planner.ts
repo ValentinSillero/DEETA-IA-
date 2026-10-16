@@ -38,6 +38,32 @@ const noSalesPattern = /(?:producto|productos).{0,40}(?:no vend[ií]|sin ventas)
 const mostRevenuePattern = /(?:producto|productos).{0,40}(?:(?:m[aá]s|mayor).{0,15}(?:factur|ingres)|(?:factur|ingres).{0,15}m[aá]s)/i;
 const leastRevenuePattern = /(?:producto|productos).{0,40}(?:(?:menos|menor).{0,15}(?:factur|ingres)|(?:factur|ingres).{0,15}menos)/i;
 
+function customerReferenceFromQuestion(question: string) {
+  const match = question.match(/(?:cu[aá]nto\s+le\s+queda\s+por\s+pagar\s+a|cu[aá]nto\s+(?:me\s+)?debe|qu[eé]\s+(?:me\s+)?debe|qu[eé]\s+compras\s+tiene\s+pendientes|(?:saldo|cuenta(?:\s+corriente)?)\s+de)\s+(?:el\s+|la\s+)?["“”']?(.+?)["“”']?\s*[?.!]*$/i);
+  const reference = match?.[1]?.trim();
+  if (!reference || /^(?:m[aá]s|menos|todo|todos|plata|dinero|algo|alguien|la gente|los clientes)$/i.test(reference)) return undefined;
+  return reference;
+}
+
+export function planCustomerAccountRequest(question: string): AiPreparedTool | undefined {
+  const normalized = question.toLocaleLowerCase("es");
+  if (/(?:pagaron|cobr[eé]|cobramos|pagos?|cobros?)\b.{0,30}(?:fiado|cuenta corriente|clientes)|(?:fiado|clientes).{0,20}(?:me\s+)?pagaron/.test(normalized)) {
+    return { name: "get_customer_payments", arguments: periodArguments(question) };
+  }
+  if (/hace\s+m[aá]s\s+tiempo.{0,30}no\s+(?:paga|pag[oó])|(?:no\s+paga|sin\s+pagar)\s+(?:hace|desde)/.test(normalized)) {
+    return { name: "get_customer_balances", arguments: { focus: "OLDEST_UNPAID" } };
+  }
+  if (/qui[eé]n.{0,10}(?:me\s+)?debe\s+m[aá]s|(?:mayor|m[aá]s grande)\s+deud/.test(normalized)) {
+    return { name: "get_customer_balances", arguments: { focus: "TOP_DEBTOR" } };
+  }
+  const customerReference = customerReferenceFromQuestion(question);
+  if (customerReference) return { name: "get_customer_account", arguments: { customerReference } };
+  if (/cu[aá]nto\s+(?:me\s+)?deben|qui[eé]n(?:es)?\s+(?:me\s+)?deben?\b|qu[eé]\s+clientes.{0,20}(?:deuda|deben|fiado)|clientes\s+con\s+deuda|total\s+(?:de\s+)?fiado|cu[aá]nto\s+tengo\s+(?:en\s+la\s+)?calle/.test(normalized)) {
+    return { name: "get_customer_balances", arguments: { focus: "DEBTORS" } };
+  }
+  return undefined;
+}
+
 export function clarificationForAiQuestion(question: string) {
   if (/\b(?:peor|mejor)\s+producto\b/i.test(question)
     && !/(?:vend|margen|rentab|stock|rotaci[oó]n|factur|ingres)/i.test(question)) {
@@ -64,6 +90,9 @@ export function planDeetaAiRequest(question: string, messages: AiConversationMes
   const cashQuestion = previousQuestions.findLast((item) => /\b(?:caja|efectivo esperado)\b/i.test(item));
   const requestedProductLimit = /\bproductos\b/.test(normalized) ? 5 : 1;
   const productReference = productReferenceFromQuestion(question);
+
+  const customerPlan = planCustomerAccountRequest(question);
+  if (customerPlan) return customerPlan;
 
   if (/(?:analiz|an[aá]lisis).*(?:negocio)|an[aá]lisis completo|(?:c[oó]mo|qu[eé] tal|qu[eé] pas[oó]).*(?:negocio)|qu[eé].*(?:deber[ií]a|conviene).*(?:mejorar|revisar)/.test(normalized)) {
     return { name: "get_business_period_analysis", arguments: period };

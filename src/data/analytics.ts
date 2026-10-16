@@ -43,6 +43,22 @@ export async function getFinancialAnalyticsForUser(
         coalesce(sum(si.unit_cost_cents * si.quantity), 0)::bigint as cogs_cents
       from scoped_sales ss left join sale_item si on si.sale_id = ss.id and si.business_id = ${businessId}
       group by ss.id, ss.total_cents, ss.payment_method, ss.local_date
+    ), payment_values as (
+      -- Cómo se cobró cada venta. Lo vendido no cambia: el fiado sigue siendo venta.
+      select ss.id, ss.local_date, sp.method::text as method, sp.amount_cents
+      from scoped_sales ss inner join sale_payment sp on sp.sale_id = ss.id and sp.business_id = ${businessId}
+      union all
+      select ss.id, ss.local_date, ss.payment_method::text, ss.total_cents
+      from scoped_sales ss
+      where not exists (select 1 from sale_payment sp where sp.sale_id = ss.id and sp.business_id = ${businessId})
+    ), payment_summary as (
+      select
+        coalesce(sum(amount_cents) filter (where method = 'CASH'), 0)::bigint as cash_sales,
+        coalesce(sum(amount_cents) filter (where method = 'TRANSFER'), 0)::bigint as transfer_sales,
+        coalesce(sum(amount_cents) filter (where method = 'CARD'), 0)::bigint as card_sales,
+        coalesce(sum(amount_cents) filter (where method = 'CREDIT'), 0)::bigint as credit_sales
+      from payment_values
+      where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date
     ), sales_summary as (
       select
         coalesce(sum(total_cents) filter (where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date), 0)::bigint as current_sales,
@@ -50,10 +66,7 @@ export async function getFinancialAnalyticsForUser(
         count(*) filter (where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date)::int as current_operations,
         coalesce(sum(total_cents) filter (where local_date between ${ranges.previous.start}::date and ${ranges.previous.end}::date), 0)::bigint as previous_sales,
         coalesce(sum(cogs_cents) filter (where local_date between ${ranges.previous.start}::date and ${ranges.previous.end}::date), 0)::bigint as previous_cogs,
-        count(*) filter (where local_date between ${ranges.previous.start}::date and ${ranges.previous.end}::date)::int as previous_operations,
-        coalesce(sum(total_cents) filter (where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date and payment_method = 'CASH'), 0)::bigint as cash_sales,
-        coalesce(sum(total_cents) filter (where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date and payment_method = 'TRANSFER'), 0)::bigint as transfer_sales,
-        coalesce(sum(total_cents) filter (where local_date between ${ranges.current.start}::date and ${ranges.current.end}::date and payment_method = 'CARD'), 0)::bigint as card_sales
+        count(*) filter (where local_date between ${ranges.previous.start}::date and ${ranges.previous.end}::date)::int as previous_operations
       from sale_values
     ), expense_summary as (
       select
@@ -62,7 +75,7 @@ export async function getFinancialAnalyticsForUser(
       from expense where business_id = ${businessId} and status = 'ACTIVE'
         and expense_date between ${ranges.previous.start}::date and ${ranges.current.end}::date
     )
-    select * from sales_summary cross join expense_summary
+    select * from sales_summary cross join payment_summary cross join expense_summary
   `;
   const row = rows[0];
   const currentRaw: RawTotals = {
@@ -120,7 +133,7 @@ export async function getFinancialAnalyticsForUser(
   const products = productRows.map((item) => mapProduct(item as Record<string, unknown>));
   return {
     timezone, ranges, current, previous,
-    payments: { cashCents: Number(row.cash_sales), transferCents: Number(row.transfer_sales), cardCents: Number(row.card_sales) },
+    payments: { cashCents: Number(row.cash_sales), transferCents: Number(row.transfer_sales), cardCents: Number(row.card_sales), creditCents: Number(row.credit_sales) },
     comparisons: {
       sales: percentageChange(current.salesCents, previous.salesCents),
       grossMargin: percentageChange(current.grossMarginCents, previous.grossMarginCents),

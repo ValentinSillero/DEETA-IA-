@@ -67,6 +67,16 @@ export function isAiToolResultAnswerable(tool: string, value: unknown) {
       });
   }
   if (tool === "get_cash_summary") return data.status === "OPEN" || data.status === "CLOSED";
+  if (tool === "get_customer_balances") {
+    return text(data.focus) && number(data.totalPendingCents) && number(data.debtors) && Array.isArray(data.customers)
+      && data.customers.every((entry) => { const item = record(entry); return Boolean(item && text(item.name) && number(item.balanceCents) && text(item.balance)); });
+  }
+  if (tool === "get_customer_account") {
+    if (data.found === false) return Array.isArray(data.matches);
+    const customer = record(data.customer);
+    return Boolean(customer && text(customer.name) && number(customer.balanceCents) && text(customer.balance) && Array.isArray(customer.pendingPurchases));
+  }
+  if (tool === "get_customer_payments") return period(data.period) && number(data.totalCents) && number(data.operations) && Array.isArray(data.byMethod);
   if (tool === "get_product_performance") return period(data.period) && productRows(data.matches, ["stock"]);
   if (tool === "get_sales_patterns") return period(data.period) && text(data.focus) && typeof data.sufficientData === "boolean";
   if (tool === "getAutomaticInsights") return period(data.period) && Array.isArray(data.insights);

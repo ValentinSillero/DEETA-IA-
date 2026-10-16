@@ -86,7 +86,15 @@ export type AiExpenseBreakdownPresentation = {
   }>;
 };
 
-export type AiPresentation = AiProductPresentation | AiBusinessOverviewPresentation | AiMetricPresentation | AiExpenseBreakdownPresentation;
+export type AiCustomerListPresentation = {
+  type: "customer-list";
+  title: string;
+  summary: string;
+  items: Array<{ name: string; balance: string; detail: string }>;
+  note?: string;
+};
+
+export type AiPresentation = AiProductPresentation | AiBusinessOverviewPresentation | AiMetricPresentation | AiExpenseBreakdownPresentation | AiCustomerListPresentation;
 
 type ToolEvidence = { tool?: unknown; data?: unknown };
 type UnknownRecord = Record<string, unknown>;
@@ -636,6 +644,76 @@ function productPerformancePresentation(data: UnknownRecord, question: string): 
   };
 }
 
+function customerBalancesPresentation(data: UnknownRecord): AiPresentation | undefined {
+  const total = text(data.totalPending);
+  const debtors = number(data.debtors);
+  if (!total || debtors === undefined) return undefined;
+  const items = records(data.customers).flatMap((customer) => {
+    const name = text(customer.name);
+    const balance = text(customer.balance);
+    if (!name || !balance) return [];
+    const days = number(customer.daysWithoutPayment);
+    const detail = data.focus === "OLDEST_UNPAID"
+      ? (text(customer.lastPaymentDate) ? `Último pago: ${text(customer.lastPaymentDate)}` : "Todavía no registró pagos") + (days !== undefined ? ` · hace ${days} ${days === 1 ? "día" : "días"}` : "")
+      : `Último movimiento: ${text(customer.lastMovementDate) ?? "sin registro"}`;
+    return [{ name, balance, detail }];
+  });
+  if (debtors === 0) {
+    return { type: "metric", title: "Te deben", value: total, explanation: "Ningún cliente tiene deuda pendiente: todos están al día.", details: [] };
+  }
+  const titles: Record<string, string> = { DEBTORS: "Clientes con deuda", TOP_DEBTOR: "Quién te debe más", OLDEST_UNPAID: "Quién hace más tiempo que no paga" };
+  return {
+    type: "customer-list",
+    title: titles[String(data.focus)] ?? "Clientes con deuda",
+    summary: `Te deben ${total} entre ${debtors} ${debtors === 1 ? "cliente" : "clientes"}.`,
+    items: items.slice(0, 8),
+    note: "Saldos según las ventas fiadas y los pagos registrados en DEETA.",
+  };
+}
+
+function customerAccountPresentation(data: UnknownRecord): AiPresentation | undefined {
+  const customer = record(data.customer);
+  if (!customer) {
+    return { type: "metric", title: "Cliente no encontrado", value: text(data.customerReference) ?? "—", explanation: "No encontramos un cliente con ese nombre en tu negocio. Revisá cómo está cargado en Clientes.", details: [] };
+  }
+  const name = text(customer.name);
+  const balance = text(customer.balance);
+  if (!name || !balance) return undefined;
+  const pending = records(customer.pendingPurchases).flatMap((purchase) => {
+    const amount = text(purchase.amount);
+    if (!amount) return [];
+    return [{ label: `Venta fiada · ${text(purchase.date) ?? ""}${text(purchase.items) ? ` · ${text(purchase.items)}` : ""}`, value: amount }];
+  });
+  const lastPayment = record(customer.lastPayment);
+  const owes = (number(customer.balanceCents) ?? 0) > 0;
+  return {
+    type: "metric",
+    title: owes ? `${name} debe` : `${name} está al día`,
+    value: balance,
+    explanation: owes
+      ? "Compras fiadas desde la última vez que estuvo al día. Los pagos se descuentan del total, no de una compra en particular."
+      : "No tiene deuda pendiente.",
+    details: [
+      ...(lastPayment && text(lastPayment.date) ? [{ label: "Último pago", value: `${text(lastPayment.amount)} · ${text(lastPayment.date)}` }] : []),
+      ...pending,
+    ],
+  };
+}
+
+function customerPaymentsPresentation(data: UnknownRecord): AiPresentation | undefined {
+  const total = text(data.total);
+  const selectedPeriod = periodLabel(data);
+  if (!total || !selectedPeriod) return undefined;
+  return {
+    type: "metric",
+    title: "Pagos de fiado recibidos",
+    value: total,
+    periodLabel: selectedPeriod,
+    explanation: "Lo que pagaron tus clientes a cuenta de su deuda. Las ventas fiadas ya se contaron como ventas el día que se hicieron.",
+    details: records(data.byMethod).flatMap((method) => text(method.method) && text(method.amount) ? [{ label: text(method.method)!, value: text(method.amount)! }] : []),
+  };
+}
+
 export function buildAiPresentation(evidence: unknown[], question: string): AiPresentation | undefined {
   if (isBusinessOverviewQuestion(question)) {
     const summaryEvidence = evidence.find((value) => ["get_business_period_analysis", "get_period_summary"].includes(text((record(value) as ToolEvidence | null)?.tool) ?? ""));
@@ -660,6 +738,9 @@ export function buildAiPresentation(evidence: unknown[], question: string): AiPr
     if (tool === "get_product_performance") return productPerformancePresentation(data, question);
     if (tool === "get_expense_breakdown") return expenseBreakdownPresentation(data);
     if (tool === "get_cash_summary") return cashMetricPresentation(data);
+    if (tool === "get_customer_balances") return customerBalancesPresentation(data);
+    if (tool === "get_customer_account") return customerAccountPresentation(data);
+    if (tool === "get_customer_payments") return customerPaymentsPresentation(data);
     if (tool === "get_sales_patterns") return salesPatternPresentation(data);
     if (tool === "get_period_summary" && !/(?:por qu[eé]|explicame|explic[aá])/.test(question.toLocaleLowerCase("es"))) return periodMetricPresentation(data, question);
   }
@@ -681,6 +762,11 @@ export function isAiPresentation(value: unknown): value is AiPresentation {
   if (candidate.type === "metric") {
     if (!text(candidate.value) || !text(candidate.explanation) || !Array.isArray(candidate.details)) return false;
     return records(candidate.details).every((detail) => text(detail.label) && text(detail.value));
+  }
+  if (candidate.type === "customer-list") {
+    if (!text(candidate.summary) || !Array.isArray(candidate.items)) return false;
+    const items = records(candidate.items);
+    return items.length <= 8 && items.every((item) => text(item.name) && text(item.balance) && text(item.detail));
   }
   if (candidate.type === "expense-breakdown") {
     if (!text(candidate.total) || !text(candidate.periodLabel) || !Array.isArray(candidate.categories)) return false;

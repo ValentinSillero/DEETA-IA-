@@ -11,6 +11,7 @@ import {
   Settings,
   ShoppingCart,
   UserRound,
+  UsersRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const sell: NavItem = { href: "/vender", label: "Vender", icon: ShoppingCart };
 const products: NavItem = { href: "/productos", label: "Productos", icon: Package };
 const sales: NavItem = { href: "/ventas", label: "Ventas", icon: ReceiptText };
 const cash: NavItem = { href: "/caja", label: "Caja", icon: CircleDollarSign };
+const customers: NavItem = { href: "/clientes", label: "Clientes", icon: UsersRound };
 const expenses: NavItem = { href: "/gastos", label: "Gastos", icon: WalletCards };
 const analytics: NavItem = { href: "/analisis", label: "Análisis", icon: ChartNoAxesCombined };
 const ai: NavItem = { href: "/deeta-ai", label: "DEETA AI", icon: Bot, aiOnly: true };
@@ -34,7 +36,7 @@ const ai: NavItem = { href: "/deeta-ai", label: "DEETA AI", icon: Bot, aiOnly: t
 // Escritorio: módulos agrupados por cómo se usan durante el día.
 const groups: Array<{ label: string | null; items: NavItem[] }> = [
   { label: null, items: [home] },
-  { label: "Día a día", items: [sales, cash, expenses] },
+  { label: "Día a día", items: [sales, customers, cash, expenses] },
   { label: "Mercadería", items: [products] },
   { label: "Mi negocio", items: [analytics, ai] },
 ];
@@ -43,6 +45,7 @@ const groups: Array<{ label: string | null; items: NavItem[] }> = [
 const mobilePrimary: NavItem[] = [home, products, sell, cash];
 const mobileMore: Array<NavItem> = [
   sales,
+  customers,
   expenses,
   analytics,
   ai,

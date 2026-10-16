@@ -3,9 +3,9 @@ import "server-only";
 import { and, asc, eq, gt, ilike, or } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
-import { businessMember, product } from "@/db/schema";
+import { businessMember, product, type PaymentMethod } from "@/db/schema";
 import type { CompleteSaleInput } from "@/lib/sale-validations";
-import { saleRequestRows } from "@/lib/sales";
+import { saleRequestRows, summarizeSalePayments, type SalePaymentLine } from "@/lib/sales";
 
 export type SaleProductDto = {
   id: string;
@@ -58,8 +58,21 @@ export type CompleteSaleResult =
         | "NO_BUSINESS"
         | "OPEN_CASH_REQUIRED"
         | "INSUFFICIENT_PAYMENT"
+        | "PAYMENT_MISMATCH"
+        | "CUSTOMER_REQUIRED"
         | "INVALID_PRODUCTS_OR_STOCK";
     };
+
+type PaymentRequest = { method: "CASH" | "TRANSFER" | "CARD" | "CREDIT"; amount_cents: number | null; payment_id: string; income_id: string };
+
+// El formato anterior (un medio por el total) se traduce a una sola línea cuyo
+// monto es el total calculado en el servidor.
+function paymentRequestRows(input: CompleteSaleInput): PaymentRequest[] {
+  const lines = input.payments
+    ? input.payments.map((line) => ({ method: line.method, amount_cents: line.amountCents as number | null }))
+    : [{ method: input.paymentMethod!, amount_cents: null }];
+  return lines.map((line) => ({ ...line, payment_id: crypto.randomUUID(), income_id: crypto.randomUUID() }));
+}
 
 export async function completeSaleForUser(
   userId: string,
@@ -67,9 +80,14 @@ export async function completeSaleForUser(
 ): Promise<CompleteSaleResult> {
   const sqlClient = getSqlClient();
   const saleId = crypto.randomUUID();
-  const incomeId = crypto.randomUUID();
+  const creditMovementId = crypto.randomUUID();
   const requestedItems = saleRequestRows(input.items);
+  const requestedPayments = paymentRequestRows(input);
+  const customerId = input.customerId ?? null;
+  const clientRequestId = input.clientRequestId ?? null;
 
+  // Toda la venta es una sola sentencia: venta, ítems, stock, cobros reales,
+  // caja y deuda del cliente se confirman juntos o no se confirma nada.
   const rows = await sqlClient`
     with member as (
       select business_id
@@ -87,6 +105,12 @@ export async function completeSaleForUser(
       inner join member m on m.business_id = cs.business_id
       where cs.status = 'OPEN'
       for update of cs
+    ), target_customer as (
+      select c.id, c.business_id, c.balance_cents
+      from customer c
+      inner join member m on m.business_id = c.business_id
+      where c.id = ${customerId}::text and c.is_active = true
+      for update of c
     ), locked_products as (
       select
         p.id as product_id,
@@ -111,27 +135,51 @@ export async function completeSaleForUser(
         coalesce(bool_and(current_stock >= quantity), false) as stock_ok,
         coalesce(sum(sale_price_cents * quantity), 0)::bigint as total_cents
       from locked_products
+    ), allocations as (
+      select
+        pr.method,
+        pr.payment_id,
+        pr.income_id,
+        coalesce(pr.amount_cents, v.total_cents)::bigint as amount_cents
+      from jsonb_to_recordset(${JSON.stringify(requestedPayments)}::jsonb)
+        as pr(method text, amount_cents bigint, payment_id text, income_id text)
+      cross join validation v
+    ), payment_summary as (
+      select
+        count(*)::int as line_count,
+        coalesce(sum(amount_cents), 0)::bigint as total_cents,
+        coalesce(sum(amount_cents) filter (where method = 'CASH'), 0)::bigint as cash_cents,
+        coalesce(sum(amount_cents) filter (where method = 'CREDIT'), 0)::bigint as credit_cents,
+        bool_and(amount_cents > 0) as amounts_ok,
+        case when count(*) = 1 then max(method) else 'MIXED' end as primary_method
+      from allocations
     ), sale_row as (
       insert into sale (
-        id, business_id, cash_session_id, total_cents, payment_method,
-        status, created_by
+        id, business_id, cash_session_id, customer_id, client_request_id,
+        total_cents, payment_method, status, created_by
       )
       select
-        ${saleId}, m.business_id, cs.id, v.total_cents, ${input.paymentMethod}::payment_method,
-        'COMPLETED', ${userId}
+        ${saleId}, m.business_id, cs.id,
+        tc.id,
+        ${clientRequestId}::text,
+        v.total_cents, ps.primary_method::payment_method, 'COMPLETED', ${userId}
       from member m
       cross join validation v
+      cross join payment_summary ps
       left join open_cash cs on cs.business_id = m.business_id
+      left join target_customer tc on tc.business_id = m.business_id
       where v.requested_count > 0
         and v.requested_count = v.locked_count
         and v.stock_ok = true
         and v.total_cents > 0
-        and (${input.paymentMethod}::payment_method <> 'CASH' or cs.id is not null)
-        and (
-          ${input.paymentMethod}::payment_method <> 'CASH'
-          or (${input.receivedCashCents}::bigint is not null and ${input.receivedCashCents}::bigint >= v.total_cents)
-        )
-      returning id, business_id, cash_session_id, total_cents, payment_method
+        and ps.amounts_ok = true
+        and ps.total_cents = v.total_cents
+        and (ps.cash_cents = 0 or cs.id is not null)
+        and (ps.cash_cents = 0 or coalesce(${input.receivedCashCents}::bigint, -1) >= ps.cash_cents)
+        and (ps.credit_cents = 0 or tc.id is not null)
+        and (${customerId}::text is null or tc.id is not null)
+      on conflict (business_id, client_request_id) where client_request_id is not null do nothing
+      returning id, business_id, cash_session_id, customer_id, total_cents
     ), lines as (
       select
         lp.*,
@@ -171,25 +219,54 @@ export async function completeSaleForUser(
         previous_stock, resulting_stock, 'Venta', ${userId}
       from updated_products
       returning id
+    ), inserted_payments as (
+      insert into sale_payment (id, business_id, sale_id, method, amount_cents)
+      select a.payment_id, s.business_id, s.id, a.method::sale_payment_method, a.amount_cents
+      from allocations a
+      cross join sale_row s
+      returning id
     ), inserted_income as (
+      -- Solo lo cobrado genera ingreso: el fiado queda en la cuenta del cliente.
       insert into income (
         id, business_id, sale_id, cash_session_id, amount_cents,
         payment_method, source, status
       )
       select
-        ${incomeId}, business_id, id, cash_session_id, total_cents,
-        payment_method, 'SALE', 'ACTIVE'
-      from sale_row
+        a.income_id, s.business_id, s.id, s.cash_session_id, a.amount_cents,
+        a.method::payment_method, 'SALE', 'ACTIVE'
+      from allocations a
+      cross join sale_row s
+      where a.method <> 'CREDIT'
       returning id
     ), updated_cash as (
       update cash_session cs
-      set expected_cash_cents = cs.expected_cash_cents + s.total_cents,
+      set expected_cash_cents = cs.expected_cash_cents + ps.cash_cents,
           updated_at = now()
       from sale_row s
+      cross join payment_summary ps
       where cs.id = s.cash_session_id
-        and s.payment_method = 'CASH'
+        and ps.cash_cents > 0
         and cs.status = 'OPEN'
       returning cs.id
+    ), credit_movement as (
+      insert into customer_account_movement (
+        id, business_id, customer_id, type, amount_cents, balance_after_cents,
+        sale_id, created_by
+      )
+      select
+        ${creditMovementId}, s.business_id, tc.id, 'CREDIT_SALE', ps.credit_cents,
+        tc.balance_cents + ps.credit_cents, s.id, ${userId}
+      from sale_row s
+      cross join payment_summary ps
+      inner join target_customer tc on tc.id = s.customer_id
+      where ps.credit_cents > 0
+      returning customer_id, balance_after_cents
+    ), updated_customer as (
+      update customer c
+      set balance_cents = cm.balance_after_cents, last_movement_at = now(), updated_at = now()
+      from credit_movement cm
+      where c.id = cm.customer_id
+      returning c.id
     ), revoked_pairing as (
       update scanner_pairing_session pairing
       set status = 'REVOKED', disconnected_at = now(), updated_at = now()
@@ -204,8 +281,10 @@ export async function completeSaleForUser(
       s.total_cents,
       (select count(*) from inserted_items)::int as item_count,
       (select count(*) from inserted_movements)::int as movement_count,
+      (select count(*) from inserted_payments)::int as payment_count,
       (select count(*) from inserted_income)::int as income_count,
       (select count(*) from updated_cash)::int as cash_update_count,
+      (select count(*) from updated_customer)::int as customer_update_count,
       (select count(*) from revoked_pairing)::int as pairing_update_count
     from sale_row s
   `;
@@ -215,7 +294,19 @@ export async function completeSaleForUser(
     return { ok: true, saleId: completed.id, totalCents: Number(completed.total_cents) };
   }
 
-  const [membershipRows, openCashRows, productRows] = await Promise.all([
+  // Doble clic: si la venta con esta clave ya existe, se devuelve la misma.
+  if (clientRequestId) {
+    const existing = await sqlClient`
+      select s.id, s.total_cents
+      from sale s
+      inner join business_member bm on bm.business_id = s.business_id and bm.user_id = ${userId}
+      where s.client_request_id = ${clientRequestId}
+      limit 1
+    `;
+    if (existing[0]) return { ok: true, saleId: String(existing[0].id), totalCents: Number(existing[0].total_cents) };
+  }
+
+  const [membershipRows, openCashRows, productRows, customerRows] = await Promise.all([
     sqlClient`select 1 from business_member where user_id = ${userId} limit 1`,
     sqlClient`
       select 1
@@ -226,23 +317,28 @@ export async function completeSaleForUser(
     `,
     sqlClient`
       with requested as (
-        select product_id
+        select product_id, quantity
         from jsonb_to_recordset(${JSON.stringify(input.items.map((item) => ({ product_id: item.productId, quantity: item.quantity })))}::jsonb)
           as item(product_id text, quantity integer)
       )
-      select p.id, p.current_stock
+      select p.id, p.current_stock, p.sale_price_cents, r.quantity
       from product p
       inner join business_member bm on bm.business_id = p.business_id
       inner join requested r on r.product_id = p.id
       where bm.user_id = ${userId}
         and p.is_active = true
     `,
+    customerId
+      ? sqlClient`
+          select 1 from customer c
+          inner join business_member bm on bm.business_id = c.business_id
+          where bm.user_id = ${userId} and c.id = ${customerId} and c.is_active = true
+          limit 1
+        `
+      : Promise.resolve([]),
   ]);
 
   if (membershipRows.length === 0) return { ok: false, reason: "NO_BUSINESS" };
-  if (input.paymentMethod === "CASH" && openCashRows.length === 0) {
-    return { ok: false, reason: "OPEN_CASH_REQUIRED" };
-  }
   const stockByProduct = new Map(
     productRows.map((row) => [String(row.id), Number(row.current_stock)]),
   );
@@ -253,16 +349,23 @@ export async function completeSaleForUser(
   ) {
     return { ok: false, reason: "INVALID_PRODUCTS_OR_STOCK" };
   }
+  const totalCents = productRows.reduce((total, row) => total + Number(row.sale_price_cents) * Number(row.quantity), 0);
+  const payments = input.payments ?? [{ method: input.paymentMethod!, amountCents: totalCents }];
+  const summary = summarizeSalePayments(payments);
+  if (summary.totalCents !== totalCents) return { ok: false, reason: "PAYMENT_MISMATCH" };
+  if ((summary.creditCents > 0 || customerId) && customerRows.length === 0) return { ok: false, reason: "CUSTOMER_REQUIRED" };
+  if (summary.cashCents > 0 && openCashRows.length === 0) return { ok: false, reason: "OPEN_CASH_REQUIRED" };
   return { ok: false, reason: "INSUFFICIENT_PAYMENT" };
 }
 
 export type SaleListItem = {
   id: string;
   totalCents: number;
-  paymentMethod: "CASH" | "TRANSFER" | "CARD";
+  paymentMethod: PaymentMethod;
   status: "COMPLETED" | "CANCELLED";
   createdAt: Date;
   createdByName: string;
+  customerName: string | null;
   itemCount: number;
   unitCount: number;
 };
@@ -277,14 +380,16 @@ export async function getSalesForUser(userId: string): Promise<SaleListItem[]> {
       s.status,
       s.created_at,
       u.name as created_by_name,
+      c.name as customer_name,
       count(si.id)::int as item_count,
       coalesce(sum(si.quantity), 0)::int as unit_count
     from sale s
     inner join business_member bm
       on bm.business_id = s.business_id and bm.user_id = ${userId}
     inner join "user" u on u.id = s.created_by
+    left join customer c on c.id = s.customer_id and c.business_id = s.business_id
     left join sale_item si on si.sale_id = s.id and si.business_id = s.business_id
-    group by s.id, u.id
+    group by s.id, u.id, c.id
     order by s.created_at desc
     limit 200
   `;
@@ -292,10 +397,11 @@ export async function getSalesForUser(userId: string): Promise<SaleListItem[]> {
   return rows.map((row) => ({
     id: String(row.id),
     totalCents: Number(row.total_cents),
-    paymentMethod: row.payment_method as SaleListItem["paymentMethod"],
+    paymentMethod: row.payment_method as PaymentMethod,
     status: row.status as SaleListItem["status"],
     createdAt: new Date(String(row.created_at)),
     createdByName: String(row.created_by_name),
+    customerName: row.customer_name ? String(row.customer_name) : null,
     itemCount: Number(row.item_count),
     unitCount: Number(row.unit_count),
   }));
@@ -306,7 +412,11 @@ export type SaleDetail = {
   businessId: string;
   cashSessionId: string | null;
   totalCents: number;
-  paymentMethod: "CASH" | "TRANSFER" | "CARD";
+  paymentMethod: PaymentMethod;
+  payments: SalePaymentLine[];
+  cashCents: number;
+  creditCents: number;
+  customer: { id: string; name: string } | null;
   status: "COMPLETED" | "CANCELLED";
   createdAt: Date;
   createdByName: string;
@@ -331,7 +441,7 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
       s.id, s.business_id, s.cash_session_id, s.total_cents, s.payment_method,
       s.status, s.created_at, creator.name as created_by_name,
       s.cancelled_at, canceller.name as cancelled_by_name, s.cancellation_reason,
-      cs.status as cash_session_status
+      cs.status as cash_session_status, c.id as customer_id, c.name as customer_name
     from sale s
     inner join business_member bm
       on bm.business_id = s.business_id and bm.user_id = ${userId}
@@ -339,28 +449,49 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
     left join "user" canceller on canceller.id = s.cancelled_by
     left join cash_session cs
       on cs.id = s.cash_session_id and cs.business_id = s.business_id
+    left join customer c on c.id = s.customer_id and c.business_id = s.business_id
     where s.id = ${saleId}
     limit 1
   `;
   const row = rows[0];
   if (!row) return null;
 
-  const itemRows = await sqlClient`
-    select si.id, si.product_id, si.product_name_snapshot, si.quantity,
-           si.unit_price_cents, si.subtotal_cents
-    from sale_item si
-    inner join business_member bm
-      on bm.business_id = si.business_id and bm.user_id = ${userId}
-    where si.sale_id = ${saleId}
-    order by si.created_at, si.id
-  `;
+  const [itemRows, paymentRows] = await Promise.all([
+    sqlClient`
+      select si.id, si.product_id, si.product_name_snapshot, si.quantity,
+             si.unit_price_cents, si.subtotal_cents
+      from sale_item si
+      inner join business_member bm
+        on bm.business_id = si.business_id and bm.user_id = ${userId}
+      where si.sale_id = ${saleId}
+      order by si.created_at, si.id
+    `,
+    sqlClient`
+      select sp.method, sp.amount_cents
+      from sale_payment sp
+      inner join business_member bm
+        on bm.business_id = sp.business_id and bm.user_id = ${userId}
+      where sp.sale_id = ${saleId}
+      order by sp.method
+    `,
+  ]);
+
+  // Ventas anteriores al cobro dividido no tienen líneas: se toma su único medio.
+  const payments: SalePaymentLine[] = paymentRows.length > 0
+    ? paymentRows.map((payment) => ({ method: payment.method as SalePaymentLine["method"], amountCents: Number(payment.amount_cents) }))
+    : [{ method: row.payment_method as SalePaymentLine["method"], amountCents: Number(row.total_cents) }];
+  const summary = summarizeSalePayments(payments);
 
   return {
     id: String(row.id),
     businessId: String(row.business_id),
     cashSessionId: row.cash_session_id ? String(row.cash_session_id) : null,
     totalCents: Number(row.total_cents),
-    paymentMethod: row.payment_method as SaleDetail["paymentMethod"],
+    paymentMethod: row.payment_method as PaymentMethod,
+    payments,
+    cashCents: summary.cashCents,
+    creditCents: summary.creditCents,
+    customer: row.customer_id ? { id: String(row.customer_id), name: String(row.customer_name) } : null,
     status: row.status as SaleDetail["status"],
     createdAt: new Date(String(row.created_at)),
     createdByName: String(row.created_by_name),
@@ -381,7 +512,7 @@ export async function getSaleForUser(userId: string, saleId: string): Promise<Sa
 
 export type CancelSaleResult =
   | { ok: true }
-  | { ok: false; reason: "NOT_FOUND" | "ALREADY_CANCELLED" | "CASH_SESSION_CLOSED" };
+  | { ok: false; reason: "NOT_FOUND" | "ALREADY_CANCELLED" | "CASH_SESSION_CLOSED" | "CREDIT_ALREADY_PAID" };
 
 export async function cancelSaleForUser(
   userId: string,
@@ -392,7 +523,7 @@ export async function cancelSaleForUser(
   const current = await getSaleForUser(userId, saleId);
   if (!current) return { ok: false, reason: "NOT_FOUND" };
   if (current.status === "CANCELLED") return { ok: false, reason: "ALREADY_CANCELLED" };
-  if (current.paymentMethod === "CASH" && current.cashSessionStatus !== "OPEN") {
+  if (current.cashCents > 0 && current.cashSessionStatus !== "OPEN") {
     return { ok: false, reason: "CASH_SESSION_CLOSED" };
   }
 
@@ -400,7 +531,11 @@ export async function cancelSaleForUser(
     product_id: item.productId,
     movement_id: crypto.randomUUID(),
   }));
+  const reversalMovementId = crypto.randomUUID();
 
+  // La parte fiada se revierte con un movimiento nuevo, nunca borrando el
+  // original. Si el cliente ya pagó tanto que su saldo es menor que lo fiado
+  // en esta venta, la cancelación se bloquea para no dejar un saldo negativo.
   const rows = await sqlClient`
     with member as (
       select business_id
@@ -414,17 +549,30 @@ export async function cancelSaleForUser(
       inner join member m on m.business_id = s.business_id
       where s.id = ${saleId} and s.status = 'COMPLETED'
       for update of s
+    ), sale_amounts as (
+      select
+        coalesce(sum(sp.amount_cents) filter (where sp.method = 'CASH'),
+          case when count(sp.id) = 0 and max(s.payment_method::text) = 'CASH' then max(s.total_cents) else 0 end)::bigint as cash_cents,
+        coalesce(sum(sp.amount_cents) filter (where sp.method = 'CREDIT'), 0)::bigint as credit_cents
+      from target_sale s
+      left join sale_payment sp on sp.sale_id = s.id and sp.business_id = s.business_id
     ), open_cash as (
       select cs.id
       from cash_session cs
       inner join target_sale s on s.cash_session_id = cs.id
       where cs.status = 'OPEN'
       for update of cs
+    ), sale_customer as (
+      select c.id, c.balance_cents
+      from customer c
+      inner join target_sale s on s.customer_id = c.id and s.business_id = c.business_id
+      for update of c
     ), allowed_sale as (
       select s.*
       from target_sale s
-      where s.payment_method <> 'CASH'
-         or exists (select 1 from open_cash)
+      cross join sale_amounts sa
+      where (sa.cash_cents = 0 or exists (select 1 from open_cash))
+        and (sa.credit_cents = 0 or exists (select 1 from sale_customer sc where sc.balance_cents >= sa.credit_cents))
     ), movement_ids as (
       select product_id, movement_id
       from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb)
@@ -448,7 +596,7 @@ export async function cancelSaleForUser(
       from allowed_sale a
       where s.id = a.id
         and (select count(*) from locked_products) = (select count(*) from sale_lines)
-      returning s.id, s.business_id, s.cash_session_id, s.total_cents, s.payment_method
+      returning s.id, s.business_id, s.cash_session_id, s.customer_id
     ), restored_products as (
       update product p
       set current_stock = p.current_stock + sl.quantity, updated_at = now()
@@ -476,19 +624,40 @@ export async function cancelSaleForUser(
       returning i.id
     ), updated_cash as (
       update cash_session cs
-      set expected_cash_cents = cs.expected_cash_cents - s.total_cents,
+      set expected_cash_cents = cs.expected_cash_cents - sa.cash_cents,
           updated_at = now()
       from cancelled_sale s
+      cross join sale_amounts sa
       where cs.id = s.cash_session_id
-        and s.payment_method = 'CASH'
+        and sa.cash_cents > 0
         and cs.status = 'OPEN'
       returning cs.id
+    ), reversal_movement as (
+      insert into customer_account_movement (
+        id, business_id, customer_id, type, amount_cents, balance_after_cents,
+        sale_id, note, created_by
+      )
+      select
+        ${reversalMovementId}, s.business_id, sc.id, 'SALE_CANCELLATION', -sa.credit_cents,
+        sc.balance_cents - sa.credit_cents, s.id, ${reason}, ${userId}
+      from cancelled_sale s
+      cross join sale_amounts sa
+      inner join sale_customer sc on sc.id = s.customer_id
+      where sa.credit_cents > 0
+      returning customer_id, balance_after_cents
+    ), updated_customer as (
+      update customer c
+      set balance_cents = rm.balance_after_cents, last_movement_at = now(), updated_at = now()
+      from reversal_movement rm
+      where c.id = rm.customer_id
+      returning c.id
     )
     select
       s.id,
       (select count(*) from return_movements)::int as movement_count,
       (select count(*) from reversed_income)::int as income_count,
-      (select count(*) from updated_cash)::int as cash_update_count
+      (select count(*) from updated_cash)::int as cash_update_count,
+      (select count(*) from updated_customer)::int as customer_update_count
     from cancelled_sale s
   `;
 
@@ -496,6 +665,10 @@ export async function cancelSaleForUser(
   const refreshed = await getSaleForUser(userId, saleId);
   if (!refreshed) return { ok: false, reason: "NOT_FOUND" };
   if (refreshed.status === "CANCELLED") return { ok: false, reason: "ALREADY_CANCELLED" };
+  if (refreshed.creditCents > 0) {
+    const balanceRows = await sqlClient`select balance_cents from customer where id = ${refreshed.customer?.id ?? null}::text`;
+    if (Number(balanceRows[0]?.balance_cents ?? 0) < refreshed.creditCents) return { ok: false, reason: "CREDIT_ALREADY_PAID" };
+  }
   return { ok: false, reason: "CASH_SESSION_CLOSED" };
 }
 
@@ -505,22 +678,36 @@ export type TodaySalesSummary = {
   cashCents: number;
   transferCents: number;
   cardCents: number;
+  creditCents: number;
 };
 
 export async function getTodaySalesSummaryForUser(userId: string): Promise<TodaySalesSummary> {
   const sqlClient = getSqlClient();
   const rows = await sqlClient`
+    with today_sales as (
+      select s.id, s.total_cents, s.payment_method
+      from sale s
+      inner join business_member bm
+        on bm.business_id = s.business_id and bm.user_id = ${userId}
+      inner join business b on b.id = s.business_id
+      where s.status = 'COMPLETED'
+        and timezone(b.timezone, s.created_at)::date = timezone(b.timezone, now())::date
+    ), allocations as (
+      select sp.method::text as method, sp.amount_cents
+      from sale_payment sp inner join today_sales t on t.id = sp.sale_id
+      union all
+      select t.payment_method::text, t.total_cents
+      from today_sales t
+      where not exists (select 1 from sale_payment sp where sp.sale_id = t.id)
+    )
     select
-      coalesce(sum(s.total_cents) filter (where s.status = 'COMPLETED'), 0)::bigint as total_cents,
-      count(*) filter (where s.status = 'COMPLETED')::int as operations,
-      coalesce(sum(s.total_cents) filter (where s.status = 'COMPLETED' and s.payment_method = 'CASH'), 0)::bigint as cash_cents,
-      coalesce(sum(s.total_cents) filter (where s.status = 'COMPLETED' and s.payment_method = 'TRANSFER'), 0)::bigint as transfer_cents,
-      coalesce(sum(s.total_cents) filter (where s.status = 'COMPLETED' and s.payment_method = 'CARD'), 0)::bigint as card_cents
-    from sale s
-    inner join business_member bm
-      on bm.business_id = s.business_id and bm.user_id = ${userId}
-    inner join business b on b.id = s.business_id
-    where timezone(b.timezone, s.created_at)::date = timezone(b.timezone, now())::date
+      (select coalesce(sum(total_cents), 0) from today_sales)::bigint as total_cents,
+      (select count(*) from today_sales)::int as operations,
+      coalesce(sum(amount_cents) filter (where method = 'CASH'), 0)::bigint as cash_cents,
+      coalesce(sum(amount_cents) filter (where method = 'TRANSFER'), 0)::bigint as transfer_cents,
+      coalesce(sum(amount_cents) filter (where method = 'CARD'), 0)::bigint as card_cents,
+      coalesce(sum(amount_cents) filter (where method = 'CREDIT'), 0)::bigint as credit_cents
+    from allocations
   `;
   const row = rows[0];
   return {
@@ -529,5 +716,6 @@ export async function getTodaySalesSummaryForUser(userId: string): Promise<Today
     cashCents: Number(row?.cash_cents ?? 0),
     transferCents: Number(row?.transfer_cents ?? 0),
     cardCents: Number(row?.card_cents ?? 0),
+    creditCents: Number(row?.credit_cents ?? 0),
   };
 }

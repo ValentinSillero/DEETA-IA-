@@ -74,6 +74,8 @@ Las migraciones `0004_previous_vampiro.sql` y `0005_jazzy_joshua_kane.sql` agreg
 
 La migración `0006_flawless_nova.sql` agrega conversaciones, mensajes y medición de uso de DEETA AI. No modifica ventas, productos, stock, caja ni autenticación.
 
+La migración `0009_clientes_fiado.sql` agrega clientes, cuenta corriente y cobro dividido. Es aditiva: crea las tablas `customer`, `customer_account_movement` y `sale_payment`, suma `customer_id` y `client_request_id` (opcionales) a `sale`, agrega los valores `CREDIT` y `MIXED` a `payment_method` y `CUSTOMER_PAYMENT` a `income_source`, y reemplaza el índice único de ingresos por venta por uno por venta y medio de pago. No reescribe ventas existentes: las ventas anteriores se leen con su único medio de pago. El saldo de cada cliente se reconstruye desde sus movimientos (positivo aumenta la deuda, negativo la reduce) y se guarda materializado para listar rápido.
+
 ## Ejecución local
 
 ```bash
@@ -141,6 +143,12 @@ La prueba integrada de primeros pasos cubre un negocio nuevo, uno parcial, uno c
 
 ```powershell
 $env:RUN_DB_TESTS="1"; npm test -- src/data/onboarding.integration.test.ts
+```
+
+La prueba integrada de clientes y fiado cubre venta 100 % fiada, venta parcialmente fiada, pagos parciales y totales, pago mayor a la deuda, cancelación, impacto en caja, idempotencia, aislamiento entre negocios y las consultas de solo lectura de DEETA AI:
+
+```powershell
+$env:RUN_DB_TESTS="1"; npm test -- src/data/customers.integration.test.ts
 ```
 
 ## Estructura

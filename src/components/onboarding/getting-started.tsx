@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, CheckCircle2, ChevronDown, CircleDollarSign, Lock, Minus, Package, ReceiptText, WalletCards, X } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, CircleDollarSign, Lock, Minus, Package, ReceiptText, UsersRound, WalletCards, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -7,7 +7,7 @@ import { setOnboardingPreferenceAction } from "@/actions/onboarding";
 import type { OnboardingExtra, OnboardingPlan, OnboardingStep, OnboardingStepId } from "@/lib/onboarding";
 
 const stepIcons: Record<OnboardingStepId, LucideIcon> = { products: Package, cash: CircleDollarSign, sale: ReceiptText };
-const extraIcons: Record<OnboardingExtra["id"], LucideIcon> = { expenses: WalletCards, ai: Bot };
+const extraIcons: Record<OnboardingExtra["id"], LucideIcon> = { expenses: WalletCards, ai: Bot, customers: UsersRound };
 
 function PreferenceButton({ preference, label, children, className }: { preference: "minimized" | "dismissed" | ""; label: string; children: React.ReactNode; className: string }) {
   return (

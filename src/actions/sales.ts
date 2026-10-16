@@ -13,7 +13,7 @@ export type CompleteSaleActionResult =
 export async function completeSaleAction(input: unknown): Promise<CompleteSaleActionResult> {
   const session = await requireFreshSession();
   const parsed = completeSaleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: "Revisá el carrito y el medio de pago." };
+  if (!parsed.success) return { ok: false, message: parsed.error.issues.find((issue) => issue.path[0] === "customerId")?.message ?? "Revisá el carrito y el medio de pago." };
 
   try {
     const result = await completeSaleForUser(session.user.id, parsed.data);
@@ -22,6 +22,8 @@ export async function completeSaleAction(input: unknown): Promise<CompleteSaleAc
         NO_BUSINESS: "No encontramos tu negocio.",
         OPEN_CASH_REQUIRED: "Primero tenés que abrir la caja.",
         INSUFFICIENT_PAYMENT: "El efectivo recibido no alcanza para cobrar la venta.",
+        PAYMENT_MISMATCH: "Los montos del pago no suman el total de la venta.",
+        CUSTOMER_REQUIRED: "Elegí un cliente para registrar la deuda.",
         INVALID_PRODUCTS_OR_STOCK: "Cambió el stock de uno de los productos. Revisá el carrito.",
       } as const;
       return { ok: false, message: messages[result.reason], code: result.reason };
@@ -30,6 +32,7 @@ export async function completeSaleAction(input: unknown): Promise<CompleteSaleAc
     revalidatePath("/productos");
     revalidatePath("/ventas");
     revalidatePath("/caja");
+    revalidatePath("/clientes");
     return result;
   } catch (error) {
     console.error("No se pudo completar la venta", error);
@@ -53,11 +56,13 @@ export async function cancelSaleAction(
   try {
     const result = await cancelSaleForUser(session.user.id, parsed.data.saleId, parsed.data.reason);
     if (!result.ok) {
-      const message = result.reason === "CASH_SESSION_CLOSED"
-        ? "No se puede cancelar una venta en efectivo después de cerrar su caja."
-        : result.reason === "ALREADY_CANCELLED"
-          ? "La venta ya estaba cancelada."
-          : "No pudimos encontrar esa venta.";
+      const messages = {
+        CASH_SESSION_CLOSED: "No se puede cancelar una venta en efectivo después de cerrar su caja.",
+        ALREADY_CANCELLED: "La venta ya estaba cancelada.",
+        NOT_FOUND: "No pudimos encontrar esa venta.",
+        CREDIT_ALREADY_PAID: "No se puede cancelar: el cliente ya pagó parte de lo fiado en esta venta. Si hace falta corregir el saldo, registrá un ajuste en su cuenta.",
+      } as const;
+      const message = messages[result.reason];
       return { status: "error", message };
     }
     revalidatePath("/dashboard");
@@ -65,7 +70,8 @@ export async function cancelSaleAction(
     revalidatePath("/ventas");
     revalidatePath(`/ventas/${parsed.data.saleId}`);
     revalidatePath("/caja");
-    return { status: "success", message: "Venta cancelada. El stock y el ingreso fueron revertidos." };
+    revalidatePath("/clientes");
+    return { status: "success", message: "Venta cancelada. El stock, los cobros y la deuda fueron revertidos." };
   } catch (error) {
     console.error("No se pudo cancelar la venta", error);
     return { status: "error", message: "No pudimos cancelar la venta. Intentá nuevamente." };

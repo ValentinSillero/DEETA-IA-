@@ -30,7 +30,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${ui.variable} ${heading.variable}`}>
+    <html lang="es" data-scroll-behavior="smooth" className={`${ui.variable} ${heading.variable}`}>
       <body>{children}</body>
     </html>
   );
