@@ -1,6 +1,24 @@
 import Link from "next/link";
 
+import { getServerConfigurationIssues } from "@/lib/env";
+
+// En desarrollo explica cómo completar la configuración local. En un deploy
+// (producción o vista previa) nunca muestra detalles internos al público: el
+// detalle queda solo en el log del servidor, sin valores secretos.
 export function ConfigurationRequired({ compact = false }: { compact?: boolean }) {
+  if (process.env.NODE_ENV === "production") {
+    console.error("[DEETA] Configuración del servidor incompleta:", getServerConfigurationIssues().join(" | "));
+    if (compact) return null;
+    return (
+      <section className="panel" role="status">
+        <p className="text-sm font-semibold text-[#a8530f]">Servicio no disponible</p>
+        <h1 className="mt-1 text-2xl font-bold">No pudimos conectar con DEETA</h1>
+        <p className="mt-2 leading-7 text-muted">Estamos teniendo un problema para iniciar sesión. Probá de nuevo en unos minutos.</p>
+        <Link href="/" className="button-secondary mt-6 w-full">Volver al inicio</Link>
+      </section>
+    );
+  }
+
   return (
     <section
       className={
