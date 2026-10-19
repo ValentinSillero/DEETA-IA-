@@ -23,8 +23,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Se permite el zoom (accesibilidad): los campos usan 16 px, así iOS no amplía al enfocarlos.
+  // Con el teclado abierto el contenido se achica y lo fijo abajo queda visible (Android).
+  interactiveWidget: "resizes-content",
   themeColor: "#f6f5f9",
 };
 

@@ -22,7 +22,7 @@ export function DeetaIcon({ className = "size-10", priority = false }: { classNa
 
 export function DeetaProductMark({ compact = false, href = "/dashboard" }: { compact?: boolean; href?: Route }) {
   return (
-    <Link href={href} className="inline-flex items-center gap-3" aria-label="DEETA, inicio">
+    <Link href={href} className="inline-flex min-h-11 min-w-11 items-center gap-3" aria-label="DEETA, inicio">
       <DeetaIcon className={compact ? "size-8" : "size-9"} priority />
       {!compact && <span className="font-display text-xl font-extrabold tracking-[-0.03em] text-ink">DEETA</span>}
     </Link>

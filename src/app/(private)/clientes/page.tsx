@@ -38,12 +38,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex items-start justify-between gap-3 sm:items-end">
+        <div className="min-w-0">
           <h1 className="page-title">Clientes</h1>
           <p className="page-lead">Quién te debe, cuánto y desde cuándo.</p>
         </div>
-        {!noCustomersYet && can(membership, "CUSTOMER_EDIT") && <Link href="/clientes/nuevo" className="button-primary"><Plus className="size-5" aria-hidden="true" /> Nuevo cliente</Link>}
+        {!noCustomersYet && can(membership, "CUSTOMER_EDIT") && <Link href="/clientes/nuevo" className="button-primary min-h-11 shrink-0 px-4"><Plus className="size-5" aria-hidden="true" /> Nuevo<span className="-ml-1 hidden sm:inline">cliente</span></Link>}
       </div>
 
       {noCustomersYet ? (
@@ -55,10 +55,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         />
       ) : (
         <>
-          <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
-            <div><dt className="text-sm text-muted">Total pendiente</dt><dd className="figure text-2xl">{formatMoney(summary.pendingCents)}</dd></div>
-            <div><dt className="text-sm text-muted">Clientes con deuda</dt><dd className="figure text-2xl">{summary.debtors}</dd></div>
-            <div><dt className="text-sm text-muted">Pagos recibidos este mes</dt><dd className="figure text-2xl">{formatMoney(summary.paymentsThisMonthCents)}</dd></div>
+          {/* Resumen en una sola franja: en el celular no ocupa media pantalla. */}
+          <dl className="mt-5 grid grid-cols-3 divide-x divide-line rounded-xl border border-line bg-surface sm:flex sm:divide-x-0 sm:gap-x-8 sm:border-0 sm:bg-transparent">
+            <div className="min-w-0 px-3 py-2.5 sm:p-0"><dt className="text-xs leading-4 text-muted sm:text-sm">Te deben</dt><dd className="figure break-all text-[clamp(0.95rem,4.6vw,1.125rem)] leading-tight sm:text-2xl">{formatMoney(summary.pendingCents)}</dd></div>
+            <div className="min-w-0 px-3 py-2.5 sm:p-0"><dt className="text-xs leading-4 text-muted sm:text-sm">Con deuda</dt><dd className="figure text-[clamp(0.95rem,4.6vw,1.125rem)] leading-tight sm:text-2xl">{summary.debtors}</dd></div>
+            <div className="min-w-0 px-3 py-2.5 sm:p-0"><dt className="text-xs leading-4 text-muted sm:text-sm">Cobrado en el mes</dt><dd className="figure break-all text-[clamp(0.95rem,4.6vw,1.125rem)] leading-tight sm:text-2xl">{formatMoney(summary.paymentsThisMonthCents)}</dd></div>
           </dl>
 
           <div className="mt-6 grid gap-3">

@@ -48,17 +48,14 @@ const groups: Array<{ label: string | null; items: NavItem[] }> = [
   { label: "Mi negocio", items: [analytics, ai, team] },
 ];
 
-// Celular: cuatro destinos directos, Vender al centro y el resto en "Más".
+// Celular: cuatro destinos directos, Vender al centro y el resto en "Más",
+// agrupado igual que en escritorio para que se encuentre rápido.
 const mobilePrimary: NavItem[] = [home, products, sell, cash, customers];
-const mobileMore: Array<NavItem> = [
-  sales,
-  customers,
-  expenses,
-  analytics,
-  ai,
-  team,
-  settings,
-  { href: "/configuracion/perfil", label: "Mi cuenta", icon: UserRound },
+const account: NavItem = { href: "/configuracion/perfil", label: "Mi cuenta", icon: UserRound };
+const mobileMoreGroups: Array<{ label: string; items: NavItem[] }> = [
+  { label: "Día a día", items: [sales, customers, expenses] },
+  { label: "Mi negocio", items: [analytics, ai, team, settings] },
+  { label: "Cuenta", items: [account] },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -126,15 +123,22 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function MobileNavigation({ permissions }: { permissions: readonly Permission[] }) {
+// `businessSwitch` llega armado desde el servidor (formularios para cambiar de
+// negocio); el menú solo decide dónde mostrarlo.
+export function MobileNavigation({ permissions, businessSwitch }: { permissions: readonly Permission[]; businessSwitch?: React.ReactNode }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [openedAt, setOpenedAt] = useState(pathname);
   // Los cuatro primeros destinos permitidos van en la barra; el resto, en "Más".
   const allowedPrimary = visible(mobilePrimary, permissions).filter((item) => item !== sell);
   const bar = [...allowedPrimary.slice(0, 2), ...(permissions.includes("SALE_CREATE") ? [sell] : []), ...allowedPrimary.slice(2, 3)];
-  const more = [...allowedPrimary.slice(3), ...visible(mobileMore, permissions)]
-    .filter((item, index, list) => !bar.includes(item) && list.findIndex((other) => other.href === item.href) === index);
-  const moreActive = more.some((item) => isActive(pathname, item.href));
+  const moreGroups = mobileMoreGroups
+    .map((group) => ({ ...group, items: visible(group.items, permissions).filter((item) => !bar.includes(item)) }))
+    .filter((group) => group.items.length > 0);
+  const moreActive = moreGroups.some((group) => group.items.some((item) => isActive(pathname, item.href)));
+
+  // Si la ruta cambia (por ejemplo, al cambiar de negocio) el menú se cierra.
+  if (openedAt !== pathname) { setOpenedAt(pathname); setMoreOpen(false); }
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -154,27 +158,33 @@ export function MobileNavigation({ permissions }: { permissions: readonly Permis
       </nav>
       {moreOpen && (
         <div className="fixed inset-0 z-50 flex items-end overscroll-none bg-ink/40" onMouseDown={(event) => event.currentTarget === event.target && setMoreOpen(false)}>
-          <div id="mobile-more" role="dialog" aria-modal="true" aria-label="Más secciones" className="w-full overscroll-contain rounded-t-2xl border-t border-line bg-surface px-3 pb-[max(14px,env(safe-area-inset-bottom))] pt-3">
-            <div className="flex items-center justify-between px-2 pb-2">
-              <p className="font-display text-lg font-bold">Más secciones</p>
+          <div id="mobile-more" role="dialog" aria-modal="true" aria-label="Más secciones" className="max-h-[88dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-line bg-surface px-3 pb-[max(14px,env(safe-area-inset-bottom))] pt-2">
+            <div className="flex items-center justify-between px-2">
+              <p className="font-display text-lg font-bold">Más</p>
               <button type="button" onClick={() => setMoreOpen(false)} className="grid size-11 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink" aria-label="Cerrar" autoFocus>
                 <X className="size-5" aria-hidden="true" />
               </button>
             </div>
-            <ul className="grid">
-              {more.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(pathname, item.href);
-                return (
-                  <li key={item.href}>
-                    <Link href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={`flex min-h-13 items-center gap-3 rounded-lg px-3 text-base font-semibold ${active ? "bg-surface-2 text-ink" : "text-ink hover:bg-surface-2"}`}>
-                      <Icon className={`size-5 ${active ? "text-brand" : "text-muted"}`} aria-hidden="true" />
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            {moreGroups.map((group) => (
+              <section key={group.label} className="mt-2" aria-label={group.label}>
+                <p className="px-3 pb-0.5 text-xs font-semibold text-subtle">{group.label}</p>
+                <ul className="grid">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isActive(pathname, item.href);
+                    return (
+                      <li key={item.href}>
+                        <Link href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? "page" : undefined} className={`flex min-h-12 items-center gap-3 rounded-lg px-3 text-base font-semibold ${active ? "bg-surface-2 text-ink" : "text-ink hover:bg-surface-2"}`}>
+                          <Icon className={`size-5 ${active ? "text-brand" : "text-muted"}`} aria-hidden="true" />
+                          {item.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+            {businessSwitch}
           </div>
         </div>
       )}

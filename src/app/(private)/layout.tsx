@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { MobileNavigation, SidebarNavigation } from "@/components/navigation/app-navigation";
-import { BusinessSwitcher } from "@/components/navigation/business-switcher";
+import { BusinessSwitcher, MobileBusinessSwitch } from "@/components/navigation/business-switcher";
 import { SessionCachePrimer } from "@/components/navigation/session-cache-primer";
 import { SignOutButton } from "@/components/navigation/sign-out-button";
 import { DeetaProductMark } from "@/components/ui/logo";
@@ -50,7 +50,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
         </header>
         <main id="contenido" className="mx-auto w-full max-w-[1160px] px-4 pb-28 pt-5 sm:px-6 md:px-8 md:pb-12 md:pt-8 lg:px-10">{children}</main>
       </div>
-      <div className="md:hidden"><MobileNavigation permissions={permissions} /></div>
+      <div className="md:hidden"><MobileNavigation permissions={permissions} businessSwitch={<MobileBusinessSwitch memberships={memberships} />} /></div>
     </div>
   );
 }

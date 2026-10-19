@@ -123,7 +123,7 @@ button, a, select { -webkit-tap-highlight-color: transparent; }
   .panel { @apply rounded-2xl border border-line bg-surface p-5 sm:p-6; }
   .section-label { @apply text-[0.8125rem] font-semibold text-muted; }
   .section-title { @apply font-display text-lg font-bold text-ink sm:text-xl; }
-  .page-title { @apply font-display text-[1.75rem] leading-[1.1] font-extrabold tracking-[-0.025em] text-ink sm:text-[2rem]; }
+  .page-title { @apply font-display text-[1.625rem] leading-[1.1] font-extrabold tracking-[-0.025em] text-ink sm:text-[2rem]; }
   .page-lead { @apply mt-1.5 text-[0.95rem] text-muted; }
   .figure { @apply font-display font-bold tracking-[-0.02em] text-ink; font-variant-numeric: lining-nums proportional-nums; }
   .list-surface { @apply overflow-hidden rounded-2xl border border-line bg-surface; }
@@ -142,7 +142,16 @@ button, a, select { -webkit-tap-highlight-color: transparent; }
   .ledger-total { @apply mt-1 flex items-baseline justify-between gap-3 border-t-[3px] border-double border-ink pt-3; }
 }
 
-/* Barra inferior móvil: cuatro destinos y Vender destacado al centro. */
+/* Barra inferior móvil: cuatro destinos y Vender destacado al centro.
+   --mobile-nav-offset es lo que ocupa la barra; las barras fijas (carrito,
+   pregunta a DEETA AI) se apoyan encima. Con el teclado abierto la barra se
+   oculta para dejar lugar al campo y a su acción. */
+:root { --mobile-nav-height: 60px; --mobile-nav-offset: var(--mobile-nav-height); }
+@media (max-width: 767px) {
+  :root:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="hidden"], [type="file"], [type="range"]), textarea, select):focus) { --mobile-nav-offset: 0px; }
+  :root:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="hidden"], [type="file"], [type="range"]), textarea, select):focus) .app-navigation { display: none; }
+}
+
 .app-navigation {
   position: fixed;
   z-index: 40;
@@ -153,31 +162,50 @@ button, a, select { -webkit-tap-highlight-color: transparent; }
   grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: end;
   gap: 2px;
-  padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--color-line);
   background: var(--deeta-surface);
 }
 
 .nav-link {
+  position: relative;
   display: flex;
   min-width: 0;
-  min-height: 54px;
+  min-height: 51px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 3px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--color-muted);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
   transition: color 150ms ease, background-color 150ms ease;
 }
-.nav-link[data-active] { color: var(--color-ink); }
+/* Activo: color, peso y una marca arriba; no depende solo del color. */
+.nav-link[data-active] { color: var(--color-ink); font-weight: 700; }
 .nav-link[data-active] svg { color: var(--deeta-primary); }
+.nav-link[data-active]:not(.nav-link-sell)::before {
+  position: absolute; top: -4px; left: 32%; right: 32%; height: 3px; border-radius: 0 0 3px 3px;
+  background: var(--deeta-primary); content: "";
+}
+
+/* DEETA AI: la conversación usa el scroll de la página y la pregunta queda
+   fija abajo, encima de la barra (o del teclado, cuando la barra se oculta). */
+.ai-chat { min-height: calc(100dvh - 3.5rem - 1.25rem - var(--mobile-nav-offset) - env(safe-area-inset-bottom)); }
+.ai-composer { bottom: calc(var(--mobile-nav-offset) + env(safe-area-inset-bottom)); }
+@media (max-width: 767px) {
+  #contenido:has(.ai-chat) { padding-bottom: calc(var(--mobile-nav-offset) + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 768px) {
+  .ai-chat { min-height: calc(100dvh - 2rem); }
+  .ai-composer { bottom: 0; }
+  #contenido:has(.ai-chat) { padding-bottom: 0; }
+}
 .nav-link-sell { background: var(--deeta-primary); color: #fff; }
 .nav-link-sell[data-active], .nav-link-sell[data-active] svg { color: #fff; }
 

@@ -53,9 +53,9 @@ export default async function ProductsPage({
           <h1 className="page-title">Productos</h1>
           <p className="page-lead">Precios, stock y estado de tu mercadería.</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div className="grid grid-cols-2 gap-2 empty:hidden sm:flex sm:flex-wrap">
           {can(membership, "PRODUCT_CREATE") && <Link href="/productos/nuevo" className="button-primary col-span-2"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link>}
-          {can(membership, "STOCK_ADJUST") && <Link href="/productos/ingresar" className={`button-secondary px-3 ${can(membership, "PRODUCT_IMPORT") ? "" : "col-span-2"}`}><Camera className="size-5" aria-hidden="true" /> <span className="sm:hidden">Con cámara</span><span className="hidden sm:inline">Ingresar con cámara</span></Link>}
+          {can(membership, "STOCK_ADJUST") && <Link href="/productos/ingresar" className={`button-secondary px-3 ${can(membership, "PRODUCT_IMPORT") ? "" : "col-span-2"}`}><Camera className="size-5" aria-hidden="true" /> <span className="sm:hidden">Cámara</span><span className="hidden sm:inline">Ingresar con cámara</span></Link>}
           {can(membership, "PRODUCT_IMPORT") && <Link href="/productos/importar" className="button-secondary px-3"><FileUp className="size-5" aria-hidden="true" /> Importar</Link>}
         </div>
       </div>

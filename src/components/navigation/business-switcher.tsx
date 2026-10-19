@@ -1,9 +1,34 @@
-import { ChevronsUpDown } from "lucide-react";
+import { ArrowLeftRight, ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 
 import { switchBusinessAction } from "@/actions/team";
 import type { MembershipOption } from "@/data/membership";
 import { ROLE_LABELS } from "@/lib/permissions";
+
+// Celular: dentro de "Más", los otros negocios de la persona para cambiar con un toque.
+export function MobileBusinessSwitch({ memberships }: { memberships: MembershipOption[] }) {
+  const others = memberships.filter((membership) => !membership.isCurrent);
+  if (others.length === 0) return null;
+  return (
+    <section className="mt-2" aria-label="Cambiar de negocio">
+      <p className="px-3 pb-0.5 text-xs font-semibold text-subtle">Cambiar de negocio</p>
+      <ul className="grid">
+        {others.map((membership) => (
+          <li key={membership.businessId}>
+            <form action={switchBusinessAction}>
+              <input type="hidden" name="businessId" value={membership.businessId} />
+              <button type="submit" className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-surface-2">
+                <ArrowLeftRight className="size-5 shrink-0 text-muted" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-base font-semibold">{membership.businessName}</span>
+                <span className="shrink-0 text-sm text-muted">{ROLE_LABELS[membership.role]}</span>
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 // Negocio activo y, si la persona pertenece a varios, la opción de cambiar.
 // Al cambiar se recalculan rol, permisos y navegación en el servidor.

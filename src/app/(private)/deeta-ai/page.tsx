@@ -1,23 +1,24 @@
-import { Info } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { AiChat } from "@/components/ai/ai-chat";
+import { AiChat, type AiActionLinks } from "@/components/ai/ai-chat";
+import { NoAccess } from "@/components/no-access";
 import { getLatestAiConversationForUser } from "@/data/ai";
 import { getBusinessForUser } from "@/data/businesses";
+import { can, getActiveMembership } from "@/data/membership";
 import { getBusinessOnboardingStateForUser } from "@/data/onboarding";
 import { getAiConfiguration } from "@/lib/env";
 import { requireSession } from "@/lib/session";
-import { NoAccess } from "@/components/no-access";
-import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "DEETA AI" };
 
 export default async function DeetaAiPage() {
   const session = await requireSession();
+  const membership = await getActiveMembership(session.user.id);
   // Bloqueo en el servidor: ocultar el enlace no alcanza.
-  if (!can(await getActiveMembership(session.user.id), "AI_USE")) return <NoAccess section="DEETA AI" />;
+  if (!can(membership, "AI_USE")) return <NoAccess section="DEETA AI" />;
   const [context, conversation, onboarding] = await Promise.all([
     getBusinessForUser(session.user.id),
     getLatestAiConversationForUser(session.user.id),
@@ -25,7 +26,30 @@ export default async function DeetaAiPage() {
   ]);
   if (!context) redirect("/onboarding");
   const configuration = getAiConfiguration();
+
+  // Próximos pasos que el chat puede ofrecer, solo los que el rol puede hacer.
+  const actions: AiActionLinks = {};
+  if (can(membership, "SALE_CREATE")) actions.SELL = { href: "/vender", label: "Registrar una venta" };
+  if (can(membership, "PRODUCT_CREATE")) actions.ADD_PRODUCT = { href: "/productos/nuevo", label: "Agregar producto" };
+  if (can(membership, "PRODUCT_VIEW")) actions.PRODUCTS = { href: "/productos", label: "Ver productos" };
+
   const hasSales = onboarding?.signals.hasSales ?? true;
-  const notice = hasSales ? null : <div className="mt-6 flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5" role="status"><Info className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden="true" /><div className="min-w-0"><p className="font-black">Todavía necesito información de tu negocio</p><p className="mt-1 text-sm leading-6 text-muted">Cuando registres tus primeras ventas, DEETA AI va a poder ayudarte a analizar tu negocio.</p><Link href={onboarding?.signals.hasStock ? "/vender" : "/productos"} className="mt-3 inline-flex min-h-11 items-center text-sm font-extrabold text-brand underline decoration-2 underline-offset-4">{onboarding?.signals.hasStock ? "Registrar primera venta" : "Cargar productos"}</Link></div></div>;
-  return <AiChat notice={notice} enabled={configuration.available} initialConversation={conversation ? { id: conversation.id, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, presentation: message.presentation })) } : null} />;
+  const nextStep = onboarding?.signals.hasStock ? actions.SELL : actions.ADD_PRODUCT;
+  const notice = hasSales ? null : (
+    <div className="notice-info flex items-start gap-3" role="status">
+      <Info className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="font-semibold">Todavía no hay ventas para analizar.</p>
+        <p className="text-muted">Cuando registres las primeras, voy a poder ayudarte mucho más.</p>
+        {nextStep && <Link href={nextStep.href} className="mt-1 inline-flex min-h-10 items-center gap-1.5 font-semibold text-brand underline-offset-4 hover:underline">{nextStep.label}<ArrowRight className="size-4" aria-hidden="true" /></Link>}
+      </div>
+    </div>
+  );
+
+  return <AiChat
+    notice={notice}
+    actions={actions}
+    enabled={configuration.available}
+    initialConversation={conversation ? { id: conversation.id, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, presentation: message.presentation })) } : null}
+  />;
 }

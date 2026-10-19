@@ -22,7 +22,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link href={`/productos/${id}`} className="inline-flex items-center gap-2 text-sm font-bold text-muted hover:text-ink"><ArrowLeft className="size-4" /> Volver al producto</Link>
+      <Link href={`/productos/${id}`} className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-muted hover:text-ink"><ArrowLeft className="size-4" /> Volver al producto</Link>
       <p className="mt-7 text-sm font-extrabold text-mint-600">Producto</p>
       <h1 className="mt-2 page-title">Editar información</h1>
       <p className="mt-3 leading-7 text-muted">Estos cambios no modifican la cantidad ni agregan movimientos.</p>
