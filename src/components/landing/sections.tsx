@@ -25,6 +25,8 @@ import {
   StockPreview,
 } from "@/components/landing/product-previews";
 import { landingLinks } from "@/components/landing/links";
+import { LandingSupportLink } from "@/components/support/landing-support-link";
+import { getSupportWhatsappNumber } from "@/lib/support";
 
 const container = "mx-auto w-full max-w-[1160px] px-4 sm:px-6 lg:px-8";
 
@@ -297,6 +299,11 @@ export function FinalCta() {
         </div>
         <StartButtons secondaryLabel="Ya tengo cuenta" />
       </div>
+      {getSupportWhatsappNumber() && (
+        <p className="mt-8 flex flex-wrap items-center gap-x-1 border-t border-line pt-5 text-muted">
+          ¿Tenés dudas antes de empezar? <LandingSupportLink className="text-ink">Hablemos por WhatsApp</LandingSupportLink>
+        </p>
+      )}
     </section>
   );
 }
@@ -320,6 +327,7 @@ export function PublicFooter() {
           <ul className="mt-2 grid gap-1 text-sm text-muted">
             <li><Link href="/crear-cuenta" className="inline-flex min-h-9 items-center hover:text-ink">Crear cuenta</Link></li>
             <li><Link href="/iniciar-sesion" className="inline-flex min-h-9 items-center hover:text-ink">Ingresar</Link></li>
+            <li><LandingSupportLink className="min-h-9 font-normal hover:text-ink">Consultas por WhatsApp</LandingSupportLink></li>
           </ul>
         </nav>
       </div>
