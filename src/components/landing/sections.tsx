@@ -26,7 +26,6 @@ import {
 } from "@/components/landing/product-previews";
 import { landingLinks } from "@/components/landing/links";
 import { LandingSupportLink } from "@/components/support/landing-support-link";
-import { getSupportWhatsappNumber } from "@/lib/support";
 
 const container = "mx-auto w-full max-w-[1160px] px-4 sm:px-6 lg:px-8";
 
@@ -36,6 +35,11 @@ function Kicker({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ id, children, className = "" }: { id?: string; children: React.ReactNode; className?: string }) {
   return <h2 id={id} className={`font-display text-[clamp(1.75rem,4.5vw,2.5rem)] font-extrabold leading-[1.1] tracking-[-0.025em] text-ink ${className}`}>{children}</h2>;
+}
+
+// Aviso de Beta, secundario: el CTA principal sigue siendo "Empezar gratis".
+function BetaNote() {
+  return <p className="mt-3 text-sm text-muted">Beta gratuita. Tu opinión nos ayuda a mejorar.</p>;
 }
 
 function StartButtons({ secondaryLabel = "Ingresar" }: { secondaryLabel?: string }) {
@@ -58,6 +62,7 @@ export function Hero() {
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-8 text-muted">Ventas, stock, caja, gastos y análisis en un solo lugar. Desde el celular o la computadora.</p>
         <div className="mt-7"><StartButtons /></div>
+        <BetaNote />
         <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted">
           {["Sin instalar nada", "Escáner con la cámara", "Pensado para el mostrador"].map((item) => (
             <li key={item} className="inline-flex items-center gap-1.5"><Check className="size-4 text-success" aria-hidden="true" />{item}</li>
@@ -297,13 +302,11 @@ export function FinalCta() {
           <SectionTitle id="cta-title" className="mt-2 max-w-2xl">Empezá a ordenar tu negocio con DEETA.</SectionTitle>
           <p className="mt-4 max-w-xl text-lg leading-8 text-muted">Creá tu cuenta, cargá tus primeros productos y conocé cómo funciona con tu negocio. Sin tarjeta y sin instalar nada.</p>
         </div>
-        <StartButtons secondaryLabel="Ya tengo cuenta" />
+        <div>
+          <StartButtons secondaryLabel="Ya tengo cuenta" />
+          <BetaNote />
+        </div>
       </div>
-      {getSupportWhatsappNumber() && (
-        <p className="mt-8 flex flex-wrap items-center gap-x-1 border-t border-line pt-5 text-muted">
-          ¿Tenés dudas antes de empezar? <LandingSupportLink className="text-ink">Hablemos por WhatsApp</LandingSupportLink>
-        </p>
-      )}
     </section>
   );
 }
@@ -311,7 +314,7 @@ export function FinalCta() {
 export function PublicFooter() {
   return (
     <footer className="border-t border-line bg-surface">
-      <div className={`${container} grid gap-8 py-10 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]`}>
+      <div className={`${container} grid gap-8 pb-24 pt-10 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] sm:pb-10`}>
         <div>
           <p className="font-display text-lg font-extrabold">DEETA</p>
           <p className="mt-1 max-w-xs text-sm leading-6 text-muted">Ventas, stock, caja, gastos y análisis para comercios, en un solo lugar.</p>
@@ -327,11 +330,18 @@ export function PublicFooter() {
           <ul className="mt-2 grid gap-1 text-sm text-muted">
             <li><Link href="/crear-cuenta" className="inline-flex min-h-9 items-center hover:text-ink">Crear cuenta</Link></li>
             <li><Link href="/iniciar-sesion" className="inline-flex min-h-9 items-center hover:text-ink">Ingresar</Link></li>
-            <li><LandingSupportLink className="min-h-9 font-normal hover:text-ink">Consultas por WhatsApp</LandingSupportLink></li>
+          </ul>
+        </nav>
+        <nav aria-label="Ayuda y legales">
+          <p className="text-sm font-semibold">DEETA</p>
+          <ul className="mt-2 grid gap-1 text-sm text-muted">
+            <li><LandingSupportLink className="min-h-9 font-normal hover:text-ink" icon={false}>Contacto</LandingSupportLink></li>
+            <li><Link href="/terminos" className="inline-flex min-h-9 items-center hover:text-ink">Términos</Link></li>
+            <li><Link href="/privacidad" className="inline-flex min-h-9 items-center hover:text-ink">Privacidad</Link></li>
           </ul>
         </nav>
       </div>
-      <div className={`${container} border-t border-line py-4 text-xs text-muted`}>© {new Date().getFullYear()} DEETA</div>
+      <div className={`${container} border-t border-line py-4 pb-24 text-xs text-muted sm:pb-4`}>© {new Date().getFullYear()} DEETA · Beta</div>
     </footer>
   );
 }

@@ -168,16 +168,16 @@ suite("catálogo sugerido", { timeout: 30_000 }, () => {
   it("importa por categoría y todo el catálogo sin duplicar ni afectar a otro negocio", { timeout: 60_000 }, async () => {
     const { importCatalogForUser } = await import("@/data/catalog");
     const { getSaleProductsForUser, completeSaleForUser } = await import("@/data/sales");
-    const catalogTotal = Number((await sql!`select count(*)::int as total from catalog_product`)[0].total);
+    const catalogTotal = Number((await sql!`select count(*)::int as total from catalog_product where excluded_at is null`)[0].total);
     const beforeB = Number((await sql!`select count(*)::int as total from product where business_id = ${ids.businessB}`)[0].total);
-    const ownedA = Number((await sql!`select count(*)::int as total from product p join catalog_product c on c.barcode = p.barcode where p.business_id = ${ids.businessA}`)[0].total);
+    const ownedA = Number((await sql!`select count(*)::int as total from product p join catalog_product c on c.barcode = p.barcode where p.business_id = ${ids.businessA} and c.excluded_at is null`)[0].total);
 
     const movementsBefore = Number((await sql!`select count(*)::int as total from stock_movement where business_id = ${ids.businessA}`)[0].total);
     // Un vendedor no puede importar.
     expect(await importCatalogForUser(ids.sellerA, null)).toEqual({ ok: false, reason: "FORBIDDEN" });
 
     // Por categoría: solo esa categoría.
-    const bebidas = Number((await sql!`select count(*)::int as total from catalog_product where category = 'Bebidas'`)[0].total);
+    const bebidas = Number((await sql!`select count(*)::int as total from catalog_product where category = 'Bebidas' and excluded_at is null`)[0].total);
     const byCategory = await importCatalogForUser(ids.ownerA, ["Bebidas"]);
     expect(byCategory.ok && byCategory.total).toBe(bebidas);
     const ownedBebidas = byCategory.ok ? byCategory.existing : -1;
@@ -214,5 +214,38 @@ suite("catálogo sugerido", { timeout: 30_000 }, () => {
     expect(sellable.some((row) => row.id === noPrice.id)).toBe(false);
     const sale = await completeSaleForUser(ids.ownerA, { items: [{ productId: String(noPrice.id), quantity: 1 }], paymentMethod: "TRANSFER" } as never);
     expect(sale).toEqual({ ok: false, reason: "NO_PRICE" });
+  });
+
+  it("excluye productos del catálogo sin tocar los productos de los negocios y ordena por relevancia", async () => {
+    const { searchCatalogForUser, catalogSuggestionForUser, importCatalogForUser, addCatalogProductsForUser } = await import("@/data/catalog");
+    const { parseCatalogCsv: parse } = await import("@/db/catalog-seed");
+    const { rows } = parse(csv);
+    // El negocio B ya tiene el código 3 (lo cargó a mano): marcarlo excluido no lo toca.
+    const ownedBefore = await sql!`select name from product where business_id = ${ids.businessB} and barcode = ${code(3)}`;
+    await upsertCatalog(sql!, rows, { exclusions: [{ barcode: code(2), reason: "Prueba" }, { barcode: code(3), reason: "Prueba" }] });
+    try {
+      const search = await searchCatalogForUser(ids.ownerB, { query: `prueba ${run}`, category: null, kioskOnly: false, page: 1 });
+      expect(search?.items.map((item) => item.barcode)).toEqual([code(1)]);
+      expect(await catalogSuggestionForUser(ids.ownerB, code(2))).toBeNull();
+      const added = await addCatalogProductsForUser(ids.ownerB, [{ barcode: code(2), salePriceCents: 100, costPriceCents: 0, initialStock: 0, minimumStock: 0 }]);
+      expect(added).toEqual({ ok: true, created: 0, skipped: [code(2)] });
+      const visible = Number((await sql!`select count(*)::int as n from catalog_product where excluded_at is null`)[0].n);
+      const imported = await importCatalogForUser(ids.ownerB, null);
+      expect(imported.ok && imported.total).toBe(visible);
+      expect(Number((await sql!`select count(*)::int as n from product where business_id = ${ids.businessB} and barcode = ${code(2)}`)[0].n)).toBe(0);
+      expect(await sql!`select name from product where business_id = ${ids.businessB} and barcode = ${code(3)}`).toEqual(ownedBefore);
+    } finally {
+      await upsertCatalog(sql!, rows);
+    }
+    // Sin búsqueda: en un kiosco arranca por Bebidas y, dentro, por relevancia.
+    const first = await searchCatalogForUser(ids.ownerA, { query: "", category: null, kioskOnly: null, page: 1 });
+    expect(first?.items[0].category).toBe("Bebidas");
+    const relevance = await sql!`select barcode, relevance from catalog_product where barcode = any(${first!.items.map((item) => item.barcode)}::text[])`;
+    const byCode = new Map(relevance.map((row) => [String(row.barcode), Number(row.relevance)]));
+    const bebidas = first!.items.filter((item) => item.category === "Bebidas").map((item) => byCode.get(item.barcode) ?? 0);
+    expect(bebidas).toEqual([...bebidas].sort((a, b) => b - a));
+    // Con búsqueda manda la coincidencia: el código exacto va primero.
+    const byCodeSearch = await searchCatalogForUser(ids.ownerA, { query: code(1), category: null, kioskOnly: false, page: 1 });
+    expect(byCodeSearch?.items[0].barcode).toBe(code(1));
   });
 });

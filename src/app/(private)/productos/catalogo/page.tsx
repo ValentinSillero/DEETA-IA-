@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CatalogPicker } from "@/components/catalog/catalog-picker";
 import { NoAccess } from "@/components/no-access";
 import { getCatalogCategories, searchCatalogForUser } from "@/data/catalog";
-import { CATALOG_ATTRIBUTION, catalogCategoryPriority } from "@/lib/catalog";
+import { CATALOG_ATTRIBUTION, CATALOG_LAST_CATEGORY, catalogCategoryPriority } from "@/lib/catalog";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Agregar desde el catálogo" };
@@ -21,7 +21,7 @@ export default async function CatalogPage() {
   ]);
   if (!initial) return <NoAccess section="agregar productos" />;
   const priority = catalogCategoryPriority(initial.rubro as Parameters<typeof catalogCategoryPriority>[0]);
-  const rank = (name: string) => { const index = priority.indexOf(name); return index === -1 ? 999 : index; };
+  const rank = (name: string) => { const index = priority.indexOf(name); return index !== -1 ? index : name === CATALOG_LAST_CATEGORY ? 1000 : 999; };
   const ordered = [...categories].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name, "es"));
 
   return (

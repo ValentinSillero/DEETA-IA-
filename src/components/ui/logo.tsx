@@ -29,6 +29,12 @@ export function DeetaProductMark({ compact = false, href = "/dashboard" }: { com
   );
 }
 
+// Etiqueta discreta de etapa Beta, junto al logo (landing y app). Va fuera del
+// enlace del logo para no cambiar su nombre accesible ("DEETA, inicio").
+export function BetaTag({ className = "" }: { className?: string }) {
+  return <span className={`inline-flex h-5 shrink-0 items-center rounded-md border border-mint-200 bg-brand-soft px-1.5 text-[0.6875rem] font-semibold leading-none text-brand ${className}`}>Beta</span>;
+}
+
 export function DeetaBrandLogo({ href = "/", className = "w-40" }: { href?: Route; className?: string }) {
   return (
     <Link href={href} className="inline-flex" aria-label="DEETA, inicio">

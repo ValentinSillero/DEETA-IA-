@@ -5,7 +5,7 @@ import { MobileNavigation, SidebarHelpLink, SidebarNavigation } from "@/componen
 import { BusinessSwitcher, MobileBusinessSwitch } from "@/components/navigation/business-switcher";
 import { SessionCachePrimer } from "@/components/navigation/session-cache-primer";
 import { SignOutButton } from "@/components/navigation/sign-out-button";
-import { DeetaProductMark } from "@/components/ui/logo";
+import { BetaTag, DeetaProductMark } from "@/components/ui/logo";
 import { can, getActiveMembership, getMembershipsForUser } from "@/data/membership";
 import { ROLE_LABELS, permissionsFor } from "@/lib/permissions";
 import { requireSession } from "@/lib/session";
@@ -32,7 +32,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
       <a href="#contenido" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-white">Ir al contenido</a>
 
       <aside className="hidden border-r border-line bg-surface md:fixed md:inset-y-0 md:flex md:w-[248px] md:flex-col">
-        <div className="px-5 pb-4 pt-5"><DeetaProductMark /></div>
+        <div className="flex items-center gap-2 px-5 pb-4 pt-5"><DeetaProductMark /><BetaTag /></div>
         <BusinessSwitcher current={current} memberships={memberships} settingsHref={settingsHref} />
         <div className="mx-5 my-4 border-t border-line" />
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"><SidebarNavigation permissions={permissions} /></div>
@@ -48,7 +48,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
 
       <div className="min-w-0 md:col-start-2">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur-sm md:hidden">
-          <DeetaProductMark compact />
+          <span className="flex shrink-0 items-center gap-1.5"><DeetaProductMark compact /><BetaTag /></span>
           <p className="min-w-0 flex-1 truncate text-center font-display text-[0.95rem] font-bold">{membership.businessName}</p>
           <Link href="/configuracion/perfil" className="grid size-9 shrink-0 place-items-center rounded-md bg-ink text-sm font-bold text-white" aria-label="Abrir mi cuenta">{initial}</Link>
         </header>

@@ -11,6 +11,7 @@ import {
   pgTable,
   pgView,
   jsonb,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -280,6 +281,13 @@ export const catalogProduct = pgTable(
     isKiosk: boolean("is_kiosk").default(false).notNull(),
     needsReview: boolean("needs_review").default(false).notNull(),
     source: text("source").notNull(),
+    // 0–100: qué tan común es el producto. Se calcula en el seed a partir de
+    // data/catalogo_relevancia.csv; ordena el catálogo cuando no hay búsqueda.
+    relevance: smallint("relevance").default(0).notNull(),
+    // Excluido del catálogo (no se borra, para conservar trazabilidad). Se
+    // define en data/catalogo_exclusiones.csv y lo aplica el seed.
+    excludedAt: timestamp("excluded_at", { withTimezone: true }),
+    excludedReason: text("excluded_reason"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

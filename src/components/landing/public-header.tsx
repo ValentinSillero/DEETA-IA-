@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { landingLinks } from "@/components/landing/links";
-import { DeetaBrandLogo } from "@/components/ui/logo";
+import { BetaTag, DeetaBrandLogo } from "@/components/ui/logo";
 
 
 // Único componente cliente de la landing: solo abre y cierra el menú móvil.
@@ -22,7 +22,7 @@ export function PublicHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 w-full max-w-[1160px] items-center gap-6 px-4 sm:px-6 lg:px-8">
-        <DeetaBrandLogo href="/" className="w-28 sm:w-32" />
+        <span className="flex items-center gap-2"><DeetaBrandLogo href="/" className="w-28 sm:w-32" /><BetaTag /></span>
         <nav className="hidden flex-1 items-center gap-1 lg:flex" aria-label="Secciones">
           {landingLinks.map((link) => (
             <a key={link.href} href={link.href} className="rounded-md px-3 py-2 text-sm font-semibold text-muted transition-colors hover:bg-surface-2 hover:text-ink">{link.label}</a>

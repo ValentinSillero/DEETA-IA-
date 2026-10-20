@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCatalogCsv } from "@/db/catalog-seed";
+import { catalogRelevance, parseCatalogCsv, parseExclusions, parseRelevanceRules } from "@/db/catalog-seed";
 import { catalogAddSchema, catalogCategoryPriority, catalogProductName, catalogSearchTerms } from "@/lib/catalog";
 
 describe("lectura del CSV del catálogo", () => {
@@ -31,11 +31,25 @@ describe("reglas del catálogo", () => {
     expect(catalogSearchTerms("  Coca  100%_x ")).toEqual(["coca", "100\\%\\_x"]);
   });
 
-  it("muestra primero golosinas, bebidas y snacks en un kiosco", () => {
+  it("muestra primero bebidas, alfajores, golosinas y snacks en un kiosco", () => {
     const kiosk = catalogCategoryPriority("KIOSK");
-    expect(kiosk.indexOf("Alfajores")).toBeLessThan(kiosk.indexOf("Bebidas"));
-    expect(kiosk.indexOf("Bebidas")).toBeLessThan(kiosk.indexOf("Galletitas"));
-    expect(catalogCategoryPriority("GROCERY")[0]).toBe("Almacén varios");
+    expect(kiosk.slice(0, 2)).toEqual(["Bebidas", "Alfajores"]);
+    expect(kiosk.indexOf("Snacks")).toBeLessThan(kiosk.indexOf("Galletitas"));
+    // Almacén empieza por lo básico; "Almacén varios" queda al final.
+    expect(catalogCategoryPriority("GROCERY")[0]).toBe("Bebidas");
+    expect(catalogCategoryPriority("GROCERY")).not.toContain("Almacén varios");
+  });
+
+  it("calcula la relevancia desde las reglas de marca, sin nombres hardcodeados", () => {
+    const rules = parseRelevanceRules("tipo,valor,puntos\nmarca,coca-cola,80\nmarca,jorgito,70\n");
+    const base = { size: "2 L", category: "Bebidas", isKiosk: true, needsReview: false, source: "off" };
+    expect(catalogRelevance({ ...base, barcode: "1", name: "Coca Cola Original", brand: "Coca-Cola" }, rules)).toBe(95);
+    expect(catalogRelevance({ ...base, barcode: "2", name: "Alfajor Jorgito", brand: "Jorgito" , source: "distribuidora+off" }, rules)).toBe(100);
+    expect(catalogRelevance({ ...base, barcode: "3", name: "3 vegetales codito", brand: "Desconocida", size: null, needsReview: true }, rules)).toBe(0);
+  });
+
+  it("lee las exclusiones con su motivo", () => {
+    expect(parseExclusions("barcode,reason\n7796285281397,Medicamento\nabc,Mal\n")).toEqual([{ barcode: "7796285281397", reason: "Medicamento" }]);
   });
 
   it("valida el lote: precio de venta obligatorio, el resto opcional", () => {

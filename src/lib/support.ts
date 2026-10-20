@@ -29,7 +29,7 @@ const SECTIONS: Record<string, string> = {
   configuracion: "Configuración",
 };
 
-export const LANDING_SUPPORT_MESSAGE = "Hola, vi DEETA y quería hacer una consulta.";
+export const LANDING_SUPPORT_MESSAGE = "Hola, estoy probando DEETA y quería comentarte...";
 
 // Clave de sección a partir de la ruta actual (/caja/123 → "caja").
 export function supportSectionKey(pathname: string | null | undefined) {

@@ -11,8 +11,10 @@ export const CATALOG_ATTRIBUTION = "Parte de los datos provienen de Open Food Fa
 
 // Qué categorías mostrar primero según el rubro: no hay datos de ventas del
 // catálogo, así que "lo más vendido" se aproxima con lo típico de cada rubro.
-const KIOSK_FIRST = ["Alfajores", "Chocolates y bombones", "Caramelos y chupetines", "Gomitas", "Chicles", "Turrones", "Bebidas", "Snacks", "Galletitas", "Barritas de cereal", "Tostadas y grisines", "Artículos de kiosco"];
-const GROCERY_FIRST = ["Almacén varios", "Lácteos y dulce de leche", "Yerba, té y café", "Fideos y arroz", "Aceites", "Azúcar y endulzantes", "Harinas y premezclas", "Tomate, salsas y aderezos", "Legumbres y conservas", "Bebidas", "Galletitas", "Sal, caldos y condimentos"];
+const KIOSK_FIRST = ["Bebidas", "Alfajores", "Chocolates y bombones", "Caramelos y chupetines", "Gomitas", "Chicles", "Turrones", "Snacks", "Galletitas", "Barritas de cereal", "Tostadas y grisines", "Artículos de kiosco"];
+const GROCERY_FIRST = ["Bebidas", "Yerba, té y café", "Lácteos y dulce de leche", "Fideos y arroz", "Aceites", "Azúcar y endulzantes", "Harinas y premezclas", "Tomate, salsas y aderezos", "Legumbres y conservas", "Galletitas", "Sal, caldos y condimentos"];
+// "Almacén varios" mezcla de todo: va siempre al final del orden inicial.
+export const CATALOG_LAST_CATEGORY = "Almacén varios";
 
 export const CATALOG_CATEGORY_PRIORITY: Partial<Record<BusinessCategory, string[]>> = {
   KIOSK: KIOSK_FIRST,

@@ -6,6 +6,7 @@ import { getSqlClient } from "@/db";
 import { businessCategory } from "@/db/schema";
 import {
   CATALOG_PAGE_SIZE,
+  CATALOG_LAST_CATEGORY,
   catalogCategoryPriority,
   catalogSearchTerms,
   type CatalogAddItem,
@@ -70,6 +71,10 @@ export async function searchCatalogForUser(userId: string, input: CatalogSearchI
   const patterns = terms.map((term) => `%${term}%`);
   const digits = /^[0-9]{3,14}$/.test(input.query.trim()) ? `${input.query.trim()}%` : null;
   const offset = (input.page - 1) * CATALOG_PAGE_SIZE;
+  // Con búsqueda manda la coincidencia (código exacto, empieza con lo buscado,
+  // lo contiene); sin búsqueda, la categoría según el rubro y la relevancia.
+  const searching = patterns.length > 0 || digits !== null;
+  const startsWith = terms[0] ? `${terms[0]}%` : null;
 
   const rows = await getSqlClient().query(
     `with member as (
@@ -86,23 +91,38 @@ export async function searchCatalogForUser(userId: string, input: CatalogSearchI
     select member.kiosk_only, member.rubro, results.*
     from member
     left join lateral (
-      select
-        c.barcode, c.name, c.size, c.brand, c.category, c.needs_review, c.is_kiosk,
-        exists (select 1 from product p where p.business_id = member.business_id and p.barcode = c.barcode) as owned,
-        count(*) over () as total
-      from catalog_product c
-      left join priority on priority.category = c.category
-      where (
-          cardinality($3::text[]) = 0
-          or lower(c.name || ' ' || coalesce(c.brand, '') || ' ' || coalesce(c.size, '')) like all ($3::text[])
-          or ($4::text is not null and c.barcode like $4)
-        )
-        and ($5::text is null or c.category = $5)
-        and (not member.kiosk_only or c.is_kiosk)
-      order by coalesce(priority.ordinality, 999), c.category, c.needs_review, lower(c.name)
+      select ranked.*
+      from (
+        select
+          c.barcode, c.name, c.size, c.brand, c.category, c.needs_review, c.is_kiosk, c.relevance,
+          exists (select 1 from product p where p.business_id = member.business_id and p.barcode = c.barcode) as owned,
+          count(*) over () as total,
+          -- Con búsqueda: código exacto, nombre que empieza con lo buscado, marca, resto.
+          case when $8 then (case
+            when c.barcode = $9 then 0
+            when lower(c.name) like $10 then 1
+            when lower(coalesce(c.brand, '')) like $10 then 2
+            else 3 end) else 0 end as match_rank,
+          -- Sin búsqueda: categoría según el rubro ("Almacén varios" al final).
+          case when $8 then 0 else coalesce(priority.ordinality, case when c.category = '${CATALOG_LAST_CATEGORY}' then 1000 else 999 end) end as category_rank,
+          -- Variedad sin búsqueda: primero el producto más relevante de cada marca,
+          -- después el segundo de cada una, y así (no 30 productos de la misma marca).
+          case when $8 then 0 else row_number() over (partition by c.category, lower(coalesce(c.brand, c.name)) order by c.relevance desc, c.needs_review, lower(c.name)) end as brand_turn
+        from catalog_product c
+        left join priority on priority.category = c.category
+        where (
+            cardinality($3::text[]) = 0
+            or lower(c.name || ' ' || coalesce(c.brand, '') || ' ' || coalesce(c.size, '')) like all ($3::text[])
+            or ($4::text is not null and c.barcode like $4)
+          )
+          and ($5::text is null or c.category = $5)
+          and (not member.kiosk_only or c.is_kiosk)
+          and c.excluded_at is null
+      ) ranked
+      order by match_rank, category_rank, case when $8 then '' else category end, brand_turn, relevance desc, needs_review, lower(name)
       limit ${CATALOG_PAGE_SIZE} offset ${offset}
     ) results on true`,
-    [userId, rolesWith("PRODUCT_CREATE"), patterns, digits, input.category, input.kioskOnly, PRIORITY_BY_RUBRO],
+    [userId, rolesWith("PRODUCT_CREATE"), patterns, digits, input.category, input.kioskOnly, PRIORITY_BY_RUBRO, searching, input.query.trim(), startsWith],
   ) as Array<Record<string, unknown>>;
 
   if (rows.length === 0) return null;
@@ -124,10 +144,11 @@ export const getCatalogCategories = unstable_cache(async (): Promise<CatalogCate
   const rows = await getSqlClient()`
     select category, count(*)::int as total, count(*) filter (where is_kiosk)::int as kiosk_total
     from catalog_product
+    where excluded_at is null
     group by category
   `;
   return rows.map((row) => ({ name: String(row.category), total: Number(row.total), kioskTotal: Number(row.kiosk_total) }));
-}, ["catalog-categories-v1"], { revalidate: 86_400, tags: ["catalog"] });
+}, ["catalog-categories-v2"], { revalidate: 86_400, tags: ["catalog"] });
 
 export type CatalogSuggestion = { barcode: string; name: string; needsReview: boolean; canAdd: boolean };
 
@@ -147,6 +168,7 @@ export async function catalogSuggestionForUser(userId: string, barcode: string):
     from catalog_product c
     cross join member
     where c.barcode = $2
+      and c.excluded_at is null
       and not exists (select 1 from product p where p.business_id = member.business_id and p.barcode = c.barcode)`,
     [userId, barcode, rolesWith("PRODUCT_CREATE")],
   ) as Array<Record<string, unknown>>;
@@ -177,7 +199,7 @@ export async function addCatalogProductsForUser(userId: string, items: CatalogAd
     ), source as (
       select i.*, ${PRODUCT_NAME_SQL} as name, c.category
       from input i
-      inner join catalog_product c on c.barcode = i.barcode
+      inner join catalog_product c on c.barcode = i.barcode and c.excluded_at is null
     ), created_products as (
       insert into product (
         id, business_id, name, cost_price_cents, sale_price_cents,
@@ -246,7 +268,7 @@ export async function importCatalogForUser(userId: string, categories: string[] 
       select c.barcode, ${PRODUCT_NAME_SQL} as name, c.category
       from catalog_product c
       cross join member
-      where $3::text[] is null or c.category = any($3::text[])
+      where c.excluded_at is null and ($3::text[] is null or c.category = any($3::text[]))
     ), created_products as (
       insert into product (
         id, business_id, name, cost_price_cents, sale_price_cents,
