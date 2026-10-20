@@ -85,6 +85,13 @@
       "when": 1792496776090,
       "tag": "0011_catalogo",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792499368730,
+      "tag": "0012_catalogo_indices",
+      "breakpoints": true
     }
   ]
 }

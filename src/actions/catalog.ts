@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { addCatalogProductsForUser } from "@/data/catalog";
-import { permissionDenied } from "@/lib/action-guard";
+import { FORBIDDEN_MESSAGE } from "@/lib/action-guard";
 import { catalogAddSchema } from "@/lib/catalog";
 import { requireFreshSession } from "@/lib/session";
 
@@ -20,8 +20,8 @@ type RawItem = { barcode: string; salePriceCents: string; costPriceCents: string
 
 export async function addCatalogProductsAction(rawItems: RawItem[]): Promise<CatalogAddState> {
   const session = await requireFreshSession();
-  const denied = await permissionDenied(session.user.id, "PRODUCT_CREATE");
-  if (denied) return { status: "error", message: denied };
+  // La membresía y el permiso PRODUCT_CREATE se validan dentro de la misma
+  // sentencia que crea los productos (sin una consulta previa repetida).
 
   const parsed = catalogAddSchema.safeParse(Array.isArray(rawItems) ? rawItems.map((item) => ({
     barcode: String(item?.barcode ?? ""),
@@ -44,7 +44,7 @@ export async function addCatalogProductsAction(rawItems: RawItem[]): Promise<Cat
 
   try {
     const result = await addCatalogProductsForUser(session.user.id, parsed.data);
-    if (!result.ok) return { status: "error", message: "Tu rol en este negocio no permite hacer esta acción." };
+    if (!result.ok) return { status: "error", message: FORBIDDEN_MESSAGE };
     revalidatePath("/productos");
     revalidatePath("/dashboard");
     const skippedText = result.skipped.length > 0 ? ` ${result.skipped.length} ya estaban en tu negocio y no se repitieron.` : "";

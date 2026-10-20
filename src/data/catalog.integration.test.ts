@@ -97,6 +97,29 @@ suite("catálogo sugerido", () => {
     expect(await searchCatalogForUser(ids.sellerA, { query: "", category: null, kioskOnly: false, page: 1 })).toBeNull();
   });
 
+  it("pagina de a 30, aplica el rubro por defecto y no encuentra lo inexistente", async () => {
+    const { searchCatalogForUser } = await import("@/data/catalog");
+    // Kiosco A: sin indicar el filtro, arranca con "Solo kiosco".
+    const kioskDefault = await searchCatalogForUser(ids.ownerA, { query: "", category: null, kioskOnly: null, page: 1 });
+    expect(kioskDefault?.kioskOnly).toBe(true);
+    expect(kioskDefault?.rubro).toBe("KIOSK");
+    expect(kioskDefault?.items.length).toBeLessThanOrEqual(30);
+    expect(kioskDefault?.items.every((item) => item.isKiosk)).toBe(true);
+    // Almacén B: arranca sin filtro.
+    expect((await searchCatalogForUser(ids.ownerB, { query: "", category: null, kioskOnly: null, page: 1 }))?.kioskOnly).toBe(false);
+    // Páginas consecutivas sin repetir productos.
+    const first = await searchCatalogForUser(ids.ownerB, { query: "", category: null, kioskOnly: false, page: 1 });
+    const second = await searchCatalogForUser(ids.ownerB, { query: "", category: null, kioskOnly: false, page: 2 });
+    expect(first?.items).toHaveLength(30);
+    expect(second?.items).toHaveLength(30);
+    expect(first!.pageCount).toBeGreaterThan(1);
+    const firstCodes = new Set(first!.items.map((item) => item.barcode));
+    expect(second!.items.some((item) => firstCodes.has(item.barcode))).toBe(false);
+    // Inexistente: sin resultados, pero con acceso.
+    const none = await searchCatalogForUser(ids.ownerB, { query: `zzzz-no-existe-${run}`, category: null, kioskOnly: false, page: 1 });
+    expect(none).toMatchObject({ items: [], total: 0, pageCount: 1 });
+  });
+
   it("la creación en lote no duplica códigos que el negocio ya tiene", async () => {
     const { addCatalogProductsForUser } = await import("@/data/catalog");
     const items = [
@@ -105,6 +128,8 @@ suite("catálogo sugerido", () => {
       { barcode: code(3), salePriceCents: 800, costPriceCents: 0, initialStock: 4, minimumStock: 1 },
     ];
     expect(await addCatalogProductsForUser(ids.sellerA, items)).toEqual({ ok: false, reason: "FORBIDDEN" });
+    // Un código repetido dentro del mismo lote se toma una sola vez.
+    items.push({ ...items[2] });
 
     const first = await addCatalogProductsForUser(ids.ownerA, items);
     expect(first).toEqual({ ok: true, created: 2, skipped: [code(1)] });

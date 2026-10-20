@@ -35,6 +35,13 @@ export function catalogProductName(name: string, size: string | null | undefined
   return `${base} ${extra}`.slice(0, 160);
 }
 
+// Con una sola letra la búsqueda de texto devuelve casi todo: se busca desde
+// dos caracteres. Los números (códigos de barras) se buscan siempre.
+export function effectiveCatalogQuery(query: string) {
+  const trimmed = query.trim();
+  return trimmed.length >= 2 || /^[0-9]+$/.test(trimmed) ? trimmed : "";
+}
+
 // Palabras de búsqueda, con los comodines de LIKE escapados.
 export function catalogSearchTerms(query: string) {
   return query
@@ -48,7 +55,8 @@ export function catalogSearchTerms(query: string) {
 export const catalogSearchSchema = z.object({
   query: z.string().trim().max(80).catch(""),
   category: z.string().trim().max(80).nullable().catch(null).transform((value) => value || null),
-  kioskOnly: z.boolean().catch(false),
+  // null = según el rubro del negocio (activado en kioscos).
+  kioskOnly: z.boolean().nullable().catch(null),
   page: z.coerce.number().int().min(1).max(500).catch(1),
 });
 export type CatalogSearchInput = z.infer<typeof catalogSearchSchema>;

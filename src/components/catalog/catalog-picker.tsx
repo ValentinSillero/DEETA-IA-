@@ -5,17 +5,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { addCatalogProductsAction, type CatalogAddState } from "@/actions/catalog";
-import type { CatalogItem } from "@/data/catalog";
-import { CATALOG_MAX_SELECTION, catalogProductName } from "@/lib/catalog";
+import type { CatalogCategory, CatalogItem, CatalogSearchResult } from "@/data/catalog";
+import { CATALOG_MAX_SELECTION, catalogProductName, effectiveCatalogQuery } from "@/lib/catalog";
 import { keepFocusOnPress, releaseFocus } from "@/lib/keep-focus";
 
-type SearchResult = {
-  items: CatalogItem[];
-  total: number;
-  page: number;
-  pageCount: number;
-  categories: Array<{ name: string; total: number }>;
-};
+type SearchResult = CatalogSearchResult;
 
 type Values = { salePriceCents: string; costPriceCents: string; initialStock: string; minimumStock: string };
 const emptyValues: Values = { salePriceCents: "", costPriceCents: "", initialStock: "", minimumStock: "" };
@@ -35,13 +29,15 @@ function ProductLine({ item }: { item: CatalogItem }) {
   </span>;
 }
 
-export function CatalogPicker({ defaultKioskOnly }: { defaultKioskOnly: boolean }) {
+// La primera página llega renderizada desde el servidor; las búsquedas siguientes
+// piden de a 30 resultados. Las categorías vienen una sola vez (globales, en caché).
+export function CatalogPicker({ initial, categories }: { initial: CatalogSearchResult; categories: CatalogCategory[] }) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [kioskOnly, setKioskOnly] = useState(defaultKioskOnly);
+  const [kioskOnly, setKioskOnly] = useState(initial.kioskOnly);
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<SearchResult | null>(null);
+  const [result, setResult] = useState<SearchResult | null>(initial);
   // Se incrementa para volver a buscar (por ejemplo, después de agregar).
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<Map<string, CatalogItem>>(new Map());
@@ -52,21 +48,25 @@ export function CatalogPicker({ defaultKioskOnly }: { defaultKioskOnly: boolean 
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    // Espera breve mientras se escribe; con una sola letra no se busca texto.
+    const timer = setTimeout(() => setDebouncedQuery(effectiveCatalogQuery(query)), 300);
     return () => clearTimeout(timer);
   }, [query]);
 
   // Búsqueda en el servidor; "Ver más" suma la página siguiente a la lista.
   // "Cargando" se deriva de qué búsqueda terminó, sin setState dentro del efecto.
   const requestKey = JSON.stringify([debouncedQuery, category, kioskOnly, page, reload]);
-  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>({ key: requestKey, error: null });
+  const skipInitialFetch = useRef(true);
   const loading = settled?.key !== requestKey;
   const error = loading ? null : settled.error;
   useEffect(() => {
+    // La primera página ya vino del servidor.
+    if (skipInitialFetch.current) { skipInitialFetch.current = false; return; }
+    // Si llega otra búsqueda, la anterior se cancela (sin respuestas fuera de orden).
     const controller = new AbortController();
-    const params = new URLSearchParams({ q: debouncedQuery, pagina: String(page) });
+    const params = new URLSearchParams({ q: debouncedQuery, pagina: String(page), kiosco: kioskOnly ? "1" : "0" });
     if (category) params.set("categoria", category);
-    if (kioskOnly) params.set("kiosco", "1");
     fetch(`/api/catalog?${params}`, { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json();
@@ -188,11 +188,11 @@ export function CatalogPicker({ defaultKioskOnly }: { defaultKioskOnly: boolean 
           <input type="checkbox" role="switch" checked={kioskOnly} onChange={(event) => changeFilter(() => { setKioskOnly(event.target.checked); setCategory(null); })} className="size-5 accent-[var(--deeta-primary)]" />
           Solo kiosco
         </label>
-        {result ? <p className="text-sm text-muted" aria-live="polite">{result.total.toLocaleString("es-AR")} productos</p> : null}
+        {result ? <p className="text-sm text-muted" aria-live="polite">{result.total === 1 ? "1 producto" : `${result.total.toLocaleString("es-AR")} productos`}</p> : null}
       </div>
       <nav className="-mx-4 scrollbar-none flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" aria-label="Categorías">
         <button type="button" className="chip" data-active={category === null || undefined} aria-pressed={category === null} onClick={() => changeFilter(() => setCategory(null))}>Todas</button>
-        {result?.categories.map((item) => <button key={item.name} type="button" className="chip" data-active={category === item.name || undefined} aria-pressed={category === item.name} onClick={() => changeFilter(() => setCategory(category === item.name ? null : item.name))}>{item.name}</button>)}
+        {categories.filter((item) => !kioskOnly || item.kioskTotal > 0).map((item) => <button key={item.name} type="button" className="chip" data-active={category === item.name || undefined} aria-pressed={category === item.name} onClick={() => changeFilter(() => setCategory(category === item.name ? null : item.name))}>{item.name}</button>)}
       </nav>
     </div>
 

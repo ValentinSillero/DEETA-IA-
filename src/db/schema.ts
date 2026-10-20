@@ -283,9 +283,10 @@ export const catalogProduct = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // Búsqueda: con ~4.000 filas un recorrido secuencial resuelve en ~1-2 ms
+    // (medido con EXPLAIN ANALYZE); por código usa la clave primaria. Los índices
+    // de trigramas iniciales no se usaban y se quitaron en la migración 0012.
     index("catalog_product_category_idx").on(table.category),
-    index("catalog_product_name_idx").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
-    index("catalog_product_brand_idx").using("gin", sql`lower(coalesce(${table.brand}, '')) gin_trgm_ops`),
     check("catalog_product_barcode_format", sql`${table.barcode} ~ '^[0-9]{8,14}$'`),
   ],
 );
