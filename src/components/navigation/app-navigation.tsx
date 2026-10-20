@@ -4,6 +4,7 @@ import {
   Bot,
   ChartNoAxesCombined,
   CircleDollarSign,
+  CircleHelp,
   Ellipsis,
   House,
   Package,
@@ -23,6 +24,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import type { Permission } from "@/lib/permissions";
+import { supportSectionKey } from "@/lib/support";
 
 // Cada destino declara el permiso que necesita. El servidor vuelve a validar
 // en cada página: ocultar un enlace es solo comodidad.
@@ -57,6 +59,24 @@ const mobileMoreGroups: Array<{ label: string; items: NavItem[] }> = [
   { label: "Mi negocio", items: [analytics, ai, team, settings] },
   { label: "Cuenta", items: [account] },
 ];
+
+// Ayuda lleva solo el nombre de la sección actual, para dar contexto al mensaje.
+function helpHref(pathname: string) {
+  const desde = supportSectionKey(pathname);
+  return { pathname: "/ayuda", query: desde ? { desde } : {} };
+}
+
+// Acceso a "Ayuda y sugerencias" al pie del menú lateral.
+export function SidebarHelpLink() {
+  const pathname = usePathname();
+  const active = isActive(pathname, "/ayuda");
+  return (
+    <Link href={helpHref(pathname)} className="side-link" data-active={active || undefined} aria-current={active ? "page" : undefined}>
+      <CircleHelp className="size-[18px] shrink-0" strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
+      <span className="truncate">Ayuda y sugerencias</span>
+    </Link>
+  );
+}
 
 function isActive(pathname: string, href: string) {
   return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
@@ -125,7 +145,7 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
 
 // `businessSwitch` llega armado desde el servidor (formularios para cambiar de
 // negocio); el menú solo decide dónde mostrarlo.
-export function MobileNavigation({ permissions, businessSwitch }: { permissions: readonly Permission[]; businessSwitch?: React.ReactNode }) {
+export function MobileNavigation({ permissions, supportEnabled = false, businessSwitch }: { permissions: readonly Permission[]; supportEnabled?: boolean; businessSwitch?: React.ReactNode }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [openedAt, setOpenedAt] = useState(pathname);
@@ -185,6 +205,14 @@ export function MobileNavigation({ permissions, businessSwitch }: { permissions:
               </section>
             ))}
             {businessSwitch}
+            {supportEnabled && (
+              <section className="mt-2 border-t border-line pt-2" aria-label="Ayuda">
+                <Link href={helpHref(pathname)} onClick={() => setMoreOpen(false)} aria-current={isActive(pathname, "/ayuda") ? "page" : undefined} className="flex min-h-12 items-center gap-3 rounded-lg px-3 text-base font-semibold text-ink hover:bg-surface-2">
+                  <CircleHelp className="size-5 text-brand" aria-hidden="true" />
+                  Ayuda y sugerencias
+                </Link>
+              </section>
+            )}
           </div>
         </div>
       )}
