@@ -247,6 +247,8 @@ export const product = pgTable(
     currentStock: integer("current_stock").default(0).notNull(),
     minimumStock: integer("minimum_stock").default(0).notNull(),
     barcode: text("barcode"),
+    // Opcional: hoy la completa el catálogo sugerido.
+    category: text("category"),
     isActive: boolean("is_active").default(true).notNull(),
     ...auditColumns,
   },
@@ -262,6 +264,29 @@ export const product = pgTable(
     check("product_sale_price_nonnegative", sql`${table.salePriceCents} >= 0`),
     check("product_current_stock_nonnegative", sql`${table.currentStock} >= 0`),
     check("product_minimum_stock_nonnegative", sql`${table.minimumStock} >= 0`),
+  ],
+);
+
+// Catálogo sugerido: global (no pertenece a ningún negocio) y de solo lectura
+// para las personas usuarias. Se carga con `npm run db:seed-catalog`.
+export const catalogProduct = pgTable(
+  "catalog_product",
+  {
+    barcode: text("barcode").primaryKey(),
+    name: text("name").notNull(),
+    size: text("size"),
+    category: text("category").notNull(),
+    brand: text("brand"),
+    isKiosk: boolean("is_kiosk").default(false).notNull(),
+    needsReview: boolean("needs_review").default(false).notNull(),
+    source: text("source").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("catalog_product_category_idx").on(table.category),
+    index("catalog_product_name_idx").using("gin", sql`lower(${table.name}) gin_trgm_ops`),
+    index("catalog_product_brand_idx").using("gin", sql`lower(coalesce(${table.brand}, '')) gin_trgm_ops`),
+    check("catalog_product_barcode_format", sql`${table.barcode} ~ '^[0-9]{8,14}$'`),
   ],
 );
 

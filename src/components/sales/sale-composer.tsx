@@ -10,11 +10,14 @@ import { lookupBarcodeAction } from "@/actions/scanner";
 import { completeSaleAction } from "@/actions/sales";
 import { SaleCheckout, type CheckoutPayload } from "@/components/sales/sale-checkout";
 import { RemoteScannerPanel } from "@/components/scanner/remote-scanner-panel";
+import { CatalogSuggestionNotice } from "@/components/catalog/catalog-suggestion";
+import type { CatalogSuggestion } from "@/data/catalog";
 import type { CustomerListItem } from "@/data/customers";
 import type { ScannerProductDto } from "@/data/scanner";
 import type { SaleProductDto } from "@/data/sales";
 import type { ScannedBarcode } from "@/lib/barcode";
 import { formatMoney } from "@/lib/inventory";
+import { keepFocusOnPress, releaseFocus } from "@/lib/keep-focus";
 
 type CartLine = SaleProductDto & { quantity: number };
 
@@ -33,7 +36,7 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
   const [clientRequestId, setClientRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string>();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scanNotice, setScanNotice] = useState<{ message: string; barcode?: string; missing?: boolean }>();
+  const [scanNotice, setScanNotice] = useState<{ message: string; barcode?: string; missing?: boolean; catalog?: CatalogSuggestion | null }>();
   const [pairingId, setPairingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -80,8 +83,18 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
     if (result.ok) addScanned(result.product);
     else {
       setScannerOpen(false);
-      setScanNotice({ message: "No encontramos este producto.", barcode: result.reason === "NOT_FOUND" ? result.barcode : scan.value, missing: true });
+      setScanNotice({ message: "No encontramos este producto.", barcode: result.reason === "NOT_FOUND" ? result.barcode : scan.value, missing: true, catalog: result.reason === "NOT_FOUND" ? result.catalog : null });
     }
+  }
+
+  // Alta desde el catálogo sin salir de la venta: se refresca la lista y, si
+  // tiene stock, se suma al carrito.
+  async function addedFromCatalog(barcode: string) {
+    router.refresh();
+    const result = await lookupBarcodeAction({ barcode });
+    if (!result.ok) { setScanNotice({ message: "Producto agregado.", barcode }); return; }
+    if (result.product.currentStock > 0) addScanned(result.product);
+    else setScanNotice({ message: `${result.product.name} quedó agregado. Cargale stock para poder venderlo.`, barcode });
   }
 
   function changeQuantity(id: string, difference: number) {
@@ -140,7 +153,8 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
         <section className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
           <div className="shrink-0">
             <div className="grid gap-2 sm:grid-cols-2"><label className="relative block sm:col-span-2"><span className="sr-only">Buscar producto por nombre o código</span><Search className="absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input min-h-13 pl-11 text-[1.05rem]" placeholder="Buscar por nombre o código…" autoComplete="off" autoFocus /></label><button type="button" onClick={() => setScannerOpen(true)} className="button-primary w-full"><Camera className="size-5" aria-hidden="true" /> Escanear</button><div className="min-w-0"><RemoteScannerPanel onProduct={addScanned} onPairingChange={setPairingId} /></div></div>
-            {scanNotice && <div className={`mt-3 rounded-2xl px-4 py-3 text-sm font-bold ${scanNotice.missing ? "border border-orange-200 bg-orange-50 text-[#9a531d]" : "bg-accent-soft text-success"}`} role="status"><p>{scanNotice.message}</p>{scanNotice.barcode && <p className="mt-1 font-mono text-xs">{scanNotice.barcode}</p>}{scanNotice.missing && <div className="mt-3 flex flex-wrap gap-2"><Link href={`/productos/nuevo?barcode=${encodeURIComponent(scanNotice.barcode ?? "")}`} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-ink px-3 text-white"><PackagePlus className="size-4" /> Crear producto</Link><button type="button" onClick={() => { setScanNotice(undefined); setScannerOpen(true); }} className="rounded-xl border border-orange-200 bg-white px-3">Volver a escanear</button></div>}</div>}
+            {scanNotice?.catalog && <div className="mt-3"><CatalogSuggestionNotice key={scanNotice.catalog.barcode} suggestion={scanNotice.catalog} askStock onAdded={(barcode) => void addedFromCatalog(barcode)} /></div>}
+            {scanNotice && !scanNotice.catalog && <div className={`mt-3 rounded-2xl px-4 py-3 text-sm font-bold ${scanNotice.missing ? "border border-orange-200 bg-orange-50 text-[#9a531d]" : "bg-accent-soft text-success"}`} role="status"><p>{scanNotice.message}</p>{scanNotice.barcode && <p className="mt-1 font-mono text-xs">{scanNotice.barcode}</p>}{scanNotice.missing && <div className="mt-3 flex flex-wrap gap-2"><Link href={`/productos/nuevo?barcode=${encodeURIComponent(scanNotice.barcode ?? "")}`} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-ink px-3 text-white"><PackagePlus className="size-4" /> Crear producto</Link><button type="button" onClick={() => { setScanNotice(undefined); setScannerOpen(true); }} className="rounded-xl border border-orange-200 bg-white px-3">Volver a escanear</button></div>}</div>}
           </div>
           <div className="list-surface mt-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
             {visibleProducts.map((product) => {
@@ -153,7 +167,7 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
         <aside className="panel sticky top-6 hidden min-h-0 overflow-hidden lg:flex">{cartContent}</aside>
       </div>
 
-      {cart.length > 0 ? <button type="button" onClick={() => setMobileCart(true)} className="fixed bottom-[calc(var(--mobile-nav-offset)+12px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 md:left-[260px] z-30 flex min-h-16 items-center justify-between gap-3 rounded-xl border border-white/15 bg-ink px-4 text-white lg:hidden" aria-label={`Ver carrito: ${units} ${units === 1 ? "producto" : "productos"}, total ${formatMoney(totalCents)}`}><span className="min-w-0 text-left font-black"><ShoppingCart className="mr-2 inline size-5" aria-hidden="true" />{units} {units === 1 ? "producto" : "productos"}</span><span className="shrink-0 text-right"><span className="block text-lg font-black">{formatMoney(totalCents)}</span><span className="block text-xs font-bold text-white/70">Ver carrito</span></span></button> : null}
+      {cart.length > 0 ? <button type="button" onMouseDown={keepFocusOnPress} onClick={() => { releaseFocus(); setMobileCart(true); }} className="fixed bottom-[calc(var(--mobile-nav-offset)+12px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 md:left-[260px] z-30 flex min-h-16 items-center justify-between gap-3 rounded-xl border border-white/15 bg-ink px-4 text-white lg:hidden" aria-label={`Ver carrito: ${units} ${units === 1 ? "producto" : "productos"}, total ${formatMoney(totalCents)}`}><span className="min-w-0 text-left font-black"><ShoppingCart className="mr-2 inline size-5" aria-hidden="true" />{units} {units === 1 ? "producto" : "productos"}</span><span className="shrink-0 text-right"><span className="block text-lg font-black">{formatMoney(totalCents)}</span><span className="block text-xs font-bold text-white/70">Ver carrito</span></span></button> : null}
       {mobileCart ? <div className="fixed inset-0 z-50 flex items-end overflow-hidden overscroll-none bg-ink/45 lg:hidden" onMouseDown={(event) => event.currentTarget === event.target && setMobileCart(false)}><div className="flex h-[min(88dvh,720px)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-surface p-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="dialog" aria-modal="true" aria-label="Carrito de venta">{cartContent}</div></div> : null}
 
       {checkout && <SaleCheckout totalCents={totalCents} hasOpenCash={hasOpenCash} initialCustomer={initialCustomer} pending={pending} error={error} onClose={() => { setCheckout(false); setError(undefined); }} onConfirm={charge} />}

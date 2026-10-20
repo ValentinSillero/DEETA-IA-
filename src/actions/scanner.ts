@@ -11,6 +11,7 @@ import {
   revokePairingForPcUser,
   sendRemoteScanForUser,
 } from "@/data/scanner";
+import { catalogSuggestionForUser } from "@/data/catalog";
 import { pairingCookieName } from "@/lib/pairing";
 import { connectPairingSchema, createPairingSchema, lookupBarcodeSchema, pairingIdSchema, remoteScanSchema } from "@/lib/scanner-validations";
 import { requireFreshSession } from "@/lib/session";
@@ -20,7 +21,10 @@ export async function lookupBarcodeAction(raw: unknown) {
   const parsed = lookupBarcodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, reason: "INVALID" as const };
   const product = await findProductByBarcodeForUser(session.user.id, parsed.data.barcode);
-  return product ? { ok: true as const, product } : { ok: false as const, reason: "NOT_FOUND" as const, barcode: parsed.data.barcode };
+  if (product) return { ok: true as const, product };
+  // Si no está en el negocio pero sí en el catálogo sugerido, se ofrece agregarlo.
+  const catalog = await catalogSuggestionForUser(session.user.id, parsed.data.barcode);
+  return { ok: false as const, reason: "NOT_FOUND" as const, barcode: parsed.data.barcode, catalog };
 }
 
 export async function createPairingAction(raw: unknown) {
@@ -59,7 +63,9 @@ export async function sendRemoteScanAction(raw: unknown) {
   if (!parsed.success) return { ok: false as const, reason: "INVALID_SCAN" as const };
   const token = (await cookies()).get(pairingCookieName(parsed.data.pairingId))?.value;
   if (!token) return { ok: false as const, reason: "INVALID_PAIRING" as const };
-  return sendRemoteScanForUser(session.user.id, token, parsed.data);
+  const result = await sendRemoteScanForUser(session.user.id, token, parsed.data);
+  if (!result.ok || result.event.status !== "NOT_FOUND") return { ...result, catalog: null };
+  return { ...result, catalog: await catalogSuggestionForUser(session.user.id, parsed.data.barcode) };
 }
 
 export async function revokePcPairingAction(raw: unknown) {

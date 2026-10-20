@@ -1,8 +1,9 @@
-import { Archive, ArrowRight, Camera, FileUp, PackagePlus, Plus, SearchX } from "lucide-react";
+import { Archive, ArrowRight, Camera, FileUp, ListChecks, PackagePlus, Plus, SearchX } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { CatalogStartCard } from "@/components/catalog/catalog-start-card";
 import { EmptyState } from "@/components/empty-state";
 import { ProductSearch } from "@/components/products/product-search";
 import { StockStatusBadge } from "@/components/products/stock-status-badge";
@@ -54,7 +55,8 @@ export default async function ProductsPage({
           <p className="page-lead">Precios, stock y estado de tu mercadería.</p>
         </div>
         <div className="grid grid-cols-2 gap-2 empty:hidden sm:flex sm:flex-wrap">
-          {can(membership, "PRODUCT_CREATE") && <Link href="/productos/nuevo" className="button-primary col-span-2"><Plus className="size-5" aria-hidden="true" /> Nuevo producto</Link>}
+          {can(membership, "PRODUCT_CREATE") && <Link href="/productos/nuevo" className="button-primary px-3"><Plus className="size-5" aria-hidden="true" /> <span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo producto</span></Link>}
+          {can(membership, "PRODUCT_CREATE") && <Link href="/productos/catalogo" className="button-secondary px-3"><ListChecks className="size-5" aria-hidden="true" /> Catálogo</Link>}
           {can(membership, "STOCK_ADJUST") && <Link href="/productos/ingresar" className={`button-secondary px-3 ${can(membership, "PRODUCT_IMPORT") ? "" : "col-span-2"}`}><Camera className="size-5" aria-hidden="true" /> <span className="sm:hidden">Cámara</span><span className="hidden sm:inline">Ingresar con cámara</span></Link>}
           {can(membership, "PRODUCT_IMPORT") && <Link href="/productos/importar" className="button-secondary px-3"><FileUp className="size-5" aria-hidden="true" /> Importar</Link>}
         </div>
@@ -79,6 +81,7 @@ export default async function ProductsPage({
         </div>
       )}
 
+      {trulyEmpty && can(membership, "PRODUCT_CREATE") && <CatalogStartCard className="mt-6" />}
       {trulyEmpty ? (
         <EmptyState
           icon={PackagePlus}

@@ -78,6 +78,13 @@
       "when": 1792170785844,
       "tag": "0010_equipo_permisos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792496776090,
+      "tag": "0011_catalogo",
+      "breakpoints": true
     }
   ]
 }

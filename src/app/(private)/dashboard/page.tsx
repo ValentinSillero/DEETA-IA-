@@ -14,6 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
+import { CatalogStartCard } from "@/components/catalog/catalog-start-card";
 import { GettingStarted } from "@/components/onboarding/getting-started";
 import { getFinancialSummaryForUser } from "@/data/analytics";
 import { getBusinessForUser } from "@/data/businesses";
@@ -88,6 +89,7 @@ export default async function DashboardPage() {
         </div>
       </header>
 
+      {!hasProducts && can(membership, "PRODUCT_CREATE") && <CatalogStartCard />}
       {onboarding && <GettingStarted plan={onboarding.plan} />}
 
       {/* Hoy: lo vendido y el resultado, como una hoja de caja del día. */}

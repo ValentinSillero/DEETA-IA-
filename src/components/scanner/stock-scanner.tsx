@@ -6,8 +6,10 @@ import { useActionState, useState } from "react";
 
 import { lookupBarcodeAction } from "@/actions/scanner";
 import { stockMovementAction, type ProductFormState } from "@/actions/products";
+import { CatalogSuggestionNotice } from "@/components/catalog/catalog-suggestion";
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner";
 import { ActionSubmitButton } from "@/components/ui/action-submit-button";
+import type { CatalogSuggestion } from "@/data/catalog";
 import type { ScannerProductDto } from "@/data/scanner";
 import type { ScannedBarcode } from "@/lib/barcode";
 
@@ -16,17 +18,24 @@ export function StockScanner() {
   const [loading, setLoading] = useState(false);
   const [product, setProduct] = useState<ScannerProductDto>();
   const [missingBarcode, setMissingBarcode] = useState<string>();
+  const [catalog, setCatalog] = useState<CatalogSuggestion | null>(null);
 
   async function detected(scan: ScannedBarcode) {
-    setOpen(false); setLoading(true); setMissingBarcode(undefined);
+    setOpen(false); setLoading(true); setMissingBarcode(undefined); setCatalog(null);
     const result = await lookupBarcodeAction({ barcode: scan.value });
     setLoading(false);
     if (result.ok) setProduct(result.product);
-    else if (result.reason === "NOT_FOUND") setMissingBarcode(result.barcode);
+    else if (result.reason === "NOT_FOUND") { setMissingBarcode(result.barcode); setCatalog(result.catalog); }
   }
-  function next() { setProduct(undefined); setMissingBarcode(undefined); setOpen(true); }
+  function next() { setProduct(undefined); setMissingBarcode(undefined); setCatalog(null); setOpen(true); }
+  // Alta desde el catálogo: después se sigue con el ingreso de unidades.
+  async function addedFromCatalog(barcode: string) {
+    const result = await lookupBarcodeAction({ barcode });
+    setMissingBarcode(undefined); setCatalog(null);
+    if (result.ok) setProduct(result.product);
+  }
 
-  return <div><button type="button" onClick={() => setOpen(true)} className="button-primary w-full"><Camera className="size-5" /> Escanear producto</button>{loading && <p className="panel mt-5 text-center font-bold text-muted">Buscando producto…</p>}{product && <StockEntryForm key={product.id} product={product} onNext={next} />}{missingBarcode && <section className="panel mt-5 text-center"><Search className="mx-auto size-9 text-muted" /><h2 className="mt-4 text-xl font-black">No encontramos este producto</h2><p className="mt-2 text-sm text-muted">Código: {missingBarcode}</p><div className="mt-5 grid gap-2 sm:grid-cols-2"><Link href={`/productos/nuevo?barcode=${encodeURIComponent(missingBarcode)}`} className="button-primary"><PackagePlus className="size-5" /> Crear producto</Link><button type="button" onClick={next} className="button-secondary">Volver a escanear</button></div><Link href="/productos" className="mt-4 inline-block text-sm font-bold text-muted underline">Buscar manualmente</Link></section>}<BarcodeScanner open={open} onClose={() => setOpen(false)} onDetected={detected} /></div>;
+  return <div><button type="button" onClick={() => setOpen(true)} className="button-primary w-full"><Camera className="size-5" /> Escanear producto</button>{loading && <p className="panel mt-5 text-center font-bold text-muted">Buscando producto…</p>}{product && <StockEntryForm key={product.id} product={product} onNext={next} />}{missingBarcode && catalog && <div className="mt-5"><CatalogSuggestionNotice key={catalog.barcode} suggestion={catalog} onAdded={(barcode) => void addedFromCatalog(barcode)} /><button type="button" onClick={next} className="button-secondary mt-3 w-full">Volver a escanear</button></div>}{missingBarcode && !catalog && <section className="panel mt-5 text-center"><Search className="mx-auto size-9 text-muted" /><h2 className="mt-4 text-xl font-black">No encontramos este producto</h2><p className="mt-2 text-sm text-muted">Código: {missingBarcode}</p><div className="mt-5 grid gap-2 sm:grid-cols-2"><Link href={`/productos/nuevo?barcode=${encodeURIComponent(missingBarcode)}`} className="button-primary"><PackagePlus className="size-5" /> Crear producto</Link><button type="button" onClick={next} className="button-secondary">Volver a escanear</button></div><Link href="/productos" className="mt-4 inline-block text-sm font-bold text-muted underline">Buscar manualmente</Link></section>}<BarcodeScanner open={open} onClose={() => setOpen(false)} onDetected={detected} /></div>;
 }
 
 function StockEntryForm({ product, onNext }: { product: ScannerProductDto; onNext: () => void }) {

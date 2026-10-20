@@ -10,6 +10,7 @@ import { DeetaIcon } from "@/components/ui/logo";
 import { aiEmptyAnswer, type AiEmptyAnswerAction } from "@/lib/ai/empty-answers";
 import type { AiPresentation } from "@/lib/ai/presentation";
 import { visibleAiResponseText } from "@/lib/ai/presentation-display";
+import { keepFocusOnPress } from "@/lib/keep-focus";
 
 type Message = { id: string; role: "USER" | "ASSISTANT"; content: string; presentation?: AiPresentation };
 export type AiActionLinks = Partial<Record<AiEmptyAnswerAction, { href: Route; label: string }>>;
@@ -219,7 +220,7 @@ export function AiChat({ enabled, initialConversation, notice, actions }: { enab
           placeholder="Escribí tu pregunta…"
           className="max-h-36 min-h-11 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-base leading-6 text-ink placeholder:text-subtle focus:outline-none focus-visible:outline-none"
         />
-        <button type="submit" disabled={!canSend} className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand text-white transition-colors hover:bg-brand-hover disabled:bg-line-strong" aria-label="Enviar pregunta"><ArrowUp className="size-5" aria-hidden="true" /></button>
+        <button type="submit" onMouseDown={keepFocusOnPress} disabled={!canSend} className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand text-white transition-colors hover:bg-brand-hover disabled:bg-line-strong" aria-label="Enviar pregunta"><ArrowUp className="size-5" aria-hidden="true" /></button>
       </div>
     </form>
   </div>;

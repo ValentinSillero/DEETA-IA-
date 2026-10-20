@@ -80,6 +80,10 @@ La migración `0010_equipo_permisos.sql` habilita equipos con roles: agrega los 
 
 Como todavía no hay proveedor de email, la invitación genera un enlace personal para copiar y enviar; el envío automático puede agregarse más adelante.
 
+La migración `0011_catalogo.sql` crea el catálogo sugerido: la tabla global `catalog_product` (no pertenece a ningún negocio y es de solo lectura para las personas usuarias) y una columna opcional `category` en `product`. Es aditiva.
+
+Con el driver HTTP de Neon, `npm run db:migrate` (drizzle-kit) no aplica migraciones. Usá `npm run db:apply`, que aplica las pendientes de `drizzle/` y las registra en `drizzle.__drizzle_migrations`. Después cargá el catálogo con `npm run db:seed-catalog`: lee `data/catalogo_base.csv` y hace upsert por código de barras, así que se puede correr las veces que haga falta sin duplicar. Los dos comandos usan `DATABASE_URL` del entorno o, si no está, la de `.env.local`. Para producción: `DATABASE_URL="<url de Neon main>" npm run db:apply` y luego el seed con la misma variable. Parte de los datos del catálogo provienen de Open Food Facts (licencia ODbL).
+
 ## Ejecución local
 
 ```bash
