@@ -23,8 +23,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Zoom bloqueado (decisión de producto).
   maximumScale: 1,
   userScalable: false,
+  // Con el teclado abierto el área visible se achica y lo que va fijo abajo
+  // (la pregunta de DEETA AI, el carrito) queda encima del teclado. No afecta el zoom.
+  interactiveWidget: "resizes-content",
   themeColor: "#f6f5f9",
 };
 

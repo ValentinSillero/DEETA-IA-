@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Complete, LegalDocument } from "@/components/legal/legal-document";
+import { LegalDocument } from "@/components/legal/legal-document";
 
 export const metadata: Metadata = {
   title: "Política de privacidad",
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
     <LegalDocument title="Política de privacidad" updatedAt={UPDATED_AT}>
       <p>Esta política explica qué información guarda DEETA, para qué la usa, con quién la comparte y qué podés hacer con ella. DEETA está en etapa Beta: el servicio puede cambiar, tener errores o interrupciones, y esta política se va a actualizar cuando cambie lo que hacemos con los datos.</p>
       <p><strong>DEETA no vende los datos personales de sus usuarios.</strong></p>
-      <p>El responsable de los datos es <Complete>nombre completo o razón social</Complete>, con domicilio en <Complete>domicilio o ciudad</Complete>. Contacto: <Complete>email de contacto para privacidad</Complete>.</p>
+      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio; el canal principal es WhatsApp.</p>
 
       <h2>1. Qué información guardamos</h2>
       <ul>
@@ -49,7 +49,7 @@ export default function PrivacyPage() {
         <li><strong>Neon:</strong> base de datos donde se guarda la información de DEETA. Los servidores están en Estados Unidos.</li>
         <li><strong>Groq:</strong> procesa las consultas de DEETA AI. Solo interviene cuando usás DEETA AI.</li>
       </ul>
-      <p><strong>Qué se envía a Groq cuando usás DEETA AI:</strong> tu pregunta, los últimos mensajes de esa conversación y los resultados de las consultas que DEETA hace a tu negocio para poder responder. Por ejemplo, nombres de productos, cantidades vendidas, importes y, si preguntás por fiado, nombres de clientes con su saldo. No se envía tu base completa ni los teléfonos, emails o notas de tus clientes. <Complete>verificar y describir la política de conservación de datos de Groq</Complete></p>
+      <p><strong>Qué se envía a Groq cuando usás DEETA AI:</strong> tu pregunta, los últimos mensajes de esa conversación y los resultados de las consultas que DEETA hace a tu negocio para poder responder. Por ejemplo, nombres de productos, cantidades vendidas, importes y, si preguntás por fiado, nombres de clientes con su saldo. No se envía tu base completa ni los teléfonos, emails o notas de tus clientes: DEETA envía solo la información necesaria para generar cada respuesta. Groq interviene únicamente cuando usás DEETA AI, y el tratamiento que hace de esa información está sujeto a sus propias políticas vigentes.</p>
       <p>Como estos proveedores operan en Estados Unidos, la información se guarda y procesa fuera de Argentina. Al usar DEETA aceptás esta transferencia, necesaria para prestar el servicio.</p>
       <p>El catálogo sugerido de productos se armó en parte con datos públicos de Open Food Facts; DEETA no envía información tuya a Open Food Facts.</p>
 
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
       <p>DEETA usa cookies propias necesarias para funcionar: para mantener tu sesión iniciada y, si usás el celular como lector, para la conexión con la computadora. No usamos cookies de publicidad ni de análisis de terceros.</p>
 
       <h2>6. Cuánto tiempo guardamos la información</h2>
-      <p>Guardamos la información mientras tu cuenta esté activa, para que puedas seguir usando DEETA y consultar tu historial. Las sesiones vencen a los 30 días. Si pedís la eliminación de tu cuenta, borramos o anonimizamos tus datos en un plazo de <Complete>plazo de eliminación</Complete>, salvo lo que debamos conservar por obligación legal. Las copias de respaldo del proveedor de base de datos pueden conservar información por un período limitado.</p>
+      <p>Guardamos la información mientras tu cuenta esté activa, para que puedas seguir usando DEETA y consultar tu historial. Las sesiones vencen a los 30 días. Si pedís la eliminación de tu cuenta, borramos o anonimizamos tus datos. Las solicitudes de eliminación se procesan en un plazo razonable, sujeto a las obligaciones legales o técnicas aplicables. Las copias de respaldo del proveedor de base de datos pueden conservar información por un período limitado.</p>
 
       <h2>7. Seguridad</h2>
       <p>Tomamos medidas razonables para proteger la información, entre ellas:</p>
@@ -74,12 +74,12 @@ export default function PrivacyPage() {
       <p>Ningún sistema es completamente seguro. Si detectamos un problema que afecte tus datos, vamos a actuar para resolverlo.</p>
 
       <h2>8. Tus derechos</h2>
-      <p>Podés pedirnos acceder a tus datos, corregirlos, actualizarlos o eliminarlos. Muchos los podés cambiar directamente en DEETA (por ejemplo, tu nombre en Mi cuenta o los datos de tu negocio). Para lo demás, escribinos a <Complete>email de contacto para privacidad</Complete>.</p>
-      <p><strong>Eliminación de la cuenta:</strong> por ahora DEETA no tiene un botón para eliminar la cuenta. Podés solicitar la eliminación de tu cuenta y de tus datos contactándonos en <Complete>email de contacto para privacidad</Complete>.</p>
+      <p>Podés pedirnos acceder a tus datos, corregirlos, actualizarlos o eliminarlos. Muchos los podés cambiar directamente en DEETA (por ejemplo, tu nombre en Mi cuenta o los datos de tu negocio). Para realizar consultas sobre privacidad, solicitar acceso, rectificación o eliminación de tus datos, podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio.</p>
+      <p><strong>Eliminación de la cuenta:</strong> por ahora DEETA no tiene un botón para eliminar la cuenta. Podés solicitar la eliminación de tu cuenta y de los datos asociados mediante los canales de contacto disponibles en DEETA.</p>
       <p>Tomamos como marco la Ley 25.326 de Protección de los Datos Personales de Argentina. La Agencia de Acceso a la Información Pública (AAIP) es el organismo de control de esa ley y podés presentar ante ella un reclamo si considerás que no respetamos tus derechos.</p>
 
       <h2>9. Menores de edad</h2>
-      <p>DEETA está pensado para comercios y no está dirigido a menores de edad. <Complete>edad mínima para usar DEETA, si querés fijarla</Complete></p>
+      <p>DEETA está pensado para comercios y no está dirigido específicamente a menores de edad.</p>
 
       <h2>10. Cambios en esta política</h2>
       <p>Podemos actualizar esta política, sobre todo durante la Beta. La versión vigente es siempre la publicada en esta página, con la fecha de arriba. Si el cambio es importante, también lo vamos a comunicar por los medios de contacto disponibles.</p>

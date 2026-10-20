@@ -26,6 +26,8 @@ import {
 } from "@/components/landing/product-previews";
 import { landingLinks } from "@/components/landing/links";
 import { LandingSupportLink } from "@/components/support/landing-support-link";
+import { XProfileLink } from "@/components/support/x-profile-link";
+import { getXProfile } from "@/lib/social";
 
 const container = "mx-auto w-full max-w-[1160px] px-4 sm:px-6 lg:px-8";
 
@@ -336,6 +338,7 @@ export function PublicFooter() {
           <p className="text-sm font-semibold">DEETA</p>
           <ul className="mt-2 grid gap-1 text-sm text-muted">
             <li><LandingSupportLink className="min-h-9 font-normal hover:text-ink" icon={false}>Contacto</LandingSupportLink></li>
+            {getXProfile() && <li><XProfileLink className="hover:text-ink" /></li>}
             <li><Link href="/terminos" className="inline-flex min-h-9 items-center hover:text-ink">Términos</Link></li>
             <li><Link href="/privacidad" className="inline-flex min-h-9 items-center hover:text-ink">Privacidad</Link></li>
           </ul>

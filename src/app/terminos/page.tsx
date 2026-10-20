@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Complete, LegalDocument } from "@/components/legal/legal-document";
+import { LegalDocument } from "@/components/legal/legal-document";
 
 export const metadata: Metadata = {
   title: "Términos y condiciones",
@@ -17,7 +17,6 @@ export default function TermsPage() {
       <h2>1. Qué es DEETA</h2>
       <p>DEETA es una aplicación web de gestión para comercios. Permite registrar productos, stock, ventas, caja, gastos, clientes y cuentas corrientes, trabajar en equipo con distintos roles, ver análisis del negocio y hacer consultas a DEETA AI, un asistente que responde con los datos que cargaste.</p>
       <p>DEETA es una herramienta de gestión. Las métricas, los análisis y las respuestas de DEETA AI son orientativos y dependen de los datos cargados: <strong>no reemplazan el asesoramiento contable, fiscal o impositivo, financiero ni legal</strong>, y no garantizamos que sean exactos en todos los casos.</p>
-      <p>El responsable de DEETA es <Complete>nombre completo o razón social</Complete>, con domicilio en <Complete>domicilio o ciudad</Complete>.</p>
 
       <h2>2. Etapa Beta</h2>
       <p>DEETA está en etapa Beta y por ahora es gratuita. Eso significa que:</p>
@@ -30,7 +29,7 @@ export default function TermsPage() {
 
       <h2>3. Tu cuenta</h2>
       <p>Para usar DEETA tenés que crear una cuenta con tu nombre, un email y una contraseña. Te pedimos que los datos sean reales.</p>
-      <p>Sos responsable de cuidar tu contraseña y de lo que se haga con tu cuenta. Si creés que alguien accedió sin permiso, cambiá la contraseña y avisanos.</p>
+      <p>Sos responsable de cuidar tu contraseña y de lo que se haga con tu cuenta. Si creés que alguien accedió sin permiso, cambiá la contraseña y avisanos por los canales de contacto disponibles en el sitio.</p>
       <p>Si sumás personas a tu negocio con el sistema de invitaciones, sos responsable de elegir a quién invitás y qué rol le das. Cada persona usa su propia cuenta.</p>
 
       <h2>4. Los datos que cargás</h2>
@@ -49,7 +48,7 @@ export default function TermsPage() {
       <p>Si detectamos un uso que infringe estos términos o pone en riesgo el servicio o a otras personas, podemos suspender o limitar el acceso a la cuenta.</p>
 
       <h2>6. Propiedad intelectual</h2>
-      <p>DEETA, su diseño, su código y su marca pertenecen a <Complete>nombre completo o razón social</Complete>. Usar el servicio no te da derechos sobre ellos. Los datos que cargás siguen siendo tuyos.</p>
+      <p>DEETA, su diseño, su código y su marca están protegidos por derechos de propiedad intelectual. Usar el servicio no te da derechos sobre ellos. Los datos que cargás siguen siendo tuyos.</p>
 
       <h2>7. Responsabilidad</h2>
       <p>Trabajamos para que DEETA funcione bien y tus datos estén seguros, pero durante la Beta el servicio se ofrece “tal como está”. En la medida que lo permita la ley, no somos responsables por decisiones tomadas solo en base a los números o las respuestas de DEETA, ni por pérdidas causadas por errores, interrupciones o datos cargados de forma incorrecta.</p>
@@ -58,11 +57,11 @@ export default function TermsPage() {
       <p>Podemos actualizar estos términos, sobre todo mientras DEETA está en Beta. La versión vigente es siempre la publicada en esta página, con la fecha de arriba. Si el cambio es importante, también lo vamos a comunicar por los medios de contacto disponibles.</p>
 
       <h2>9. Baja</h2>
-      <p>Podés dejar de usar DEETA cuando quieras. Para pedir la eliminación de tu cuenta y de tus datos, escribinos a <Complete>email de contacto</Complete>.</p>
+      <p>Podés dejar de usar DEETA cuando quieras. Para pedir la eliminación de tu cuenta y de los datos asociados, comunicate con DEETA mediante los canales de contacto disponibles en el sitio.</p>
 
       <h2>10. Contacto</h2>
-      <p>Para consultas sobre estos términos: <Complete>email de contacto</Complete>.</p>
-      <p>Estos términos se rigen por las leyes de la República Argentina. <Complete>jurisdicción aplicable, si querés fijarla</Complete></p>
+      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio. El canal principal es WhatsApp.</p>
+      <p>Estos términos se rigen por las leyes de la República Argentina.</p>
     </LegalDocument>
   );
 }
