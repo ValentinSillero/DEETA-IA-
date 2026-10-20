@@ -28,6 +28,7 @@ export async function completeSaleAction(input: unknown): Promise<CompleteSaleAc
         PAYMENT_MISMATCH: "Los montos del pago no suman el total de la venta.",
         CUSTOMER_REQUIRED: "Elegí un cliente para registrar la deuda.",
         INVALID_PRODUCTS_OR_STOCK: "Cambió el stock de uno de los productos. Revisá el carrito.",
+        NO_PRICE: "Hay un producto sin precio de venta. Cargale el precio en Productos para poder venderlo.",
       } as const;
       return { ok: false, message: messages[result.reason], code: result.reason };
     }

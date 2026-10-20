@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, gt, ilike, or } from "drizzle-orm";
+import { and, asc, eq, gt, ilike, inArray, or } from "drizzle-orm";
 
 import { getDb, getSqlClient } from "@/db";
 import { activeMembership, product, type PaymentMethod } from "@/db/schema";
@@ -16,7 +16,11 @@ export type SaleProductDto = {
   barcode: string | null;
 };
 
-export async function getSaleProductsForUser(userId: string, search = "") {
+// Vender muestra hasta `limit` productos con stock y precio. Con inventarios
+// grandes, el resto se encuentra buscando en el servidor (search).
+export const SALE_PRODUCTS_LIMIT = 200;
+
+export async function getSaleProductsForUser(userId: string, search = "", limit = SALE_PRODUCTS_LIMIT) {
   const db = getDb();
   const normalizedSearch = search.trim().slice(0, 100);
   return db
@@ -33,12 +37,15 @@ export async function getSaleProductsForUser(userId: string, search = "") {
       and(
         eq(activeMembership.businessId, product.businessId),
         eq(activeMembership.userId, userId),
+        inArray(activeMembership.role, rolesWith("SALE_CREATE")),
       ),
     )
     .where(
       and(
         eq(product.isActive, true),
         gt(product.currentStock, 0),
+        // Sin precio ($0) no se vende: no aparece en Vender.
+        gt(product.salePriceCents, 0),
         normalizedSearch
           ? or(
               ilike(product.name, `%${normalizedSearch}%`),
@@ -48,7 +55,7 @@ export async function getSaleProductsForUser(userId: string, search = "") {
       ),
     )
     .orderBy(asc(product.name))
-    .limit(200) satisfies Promise<SaleProductDto[]>;
+    .limit(limit) satisfies Promise<SaleProductDto[]>;
 }
 
 export type CompleteSaleResult =
@@ -61,7 +68,8 @@ export type CompleteSaleResult =
         | "INSUFFICIENT_PAYMENT"
         | "PAYMENT_MISMATCH"
         | "CUSTOMER_REQUIRED"
-        | "INVALID_PRODUCTS_OR_STOCK";
+        | "INVALID_PRODUCTS_OR_STOCK"
+        | "NO_PRICE";
     };
 
 type PaymentRequest = { method: "CASH" | "TRANSFER" | "CARD" | "CREDIT"; amount_cents: number | null; payment_id: string; income_id: string };
@@ -126,7 +134,8 @@ export async function completeSaleForUser(
       from product p
       inner join requested r on r.product_id = p.id
       inner join member m on m.business_id = p.business_id
-      where p.is_active = true
+      -- Precio $0 = "Sin precio": no se puede vender hasta cargarlo.
+      where p.is_active = true and p.sale_price_cents > 0
       order by p.id
       for update of p
     ), validation as (
@@ -340,6 +349,7 @@ export async function completeSaleForUser(
   ]);
 
   if (membershipRows.length === 0) return { ok: false, reason: "NO_BUSINESS" };
+  if (productRows.some((row) => Number(row.sale_price_cents) <= 0)) return { ok: false, reason: "NO_PRICE" };
   const stockByProduct = new Map(
     productRows.map((row) => [String(row.id), Number(row.current_stock)]),
   );

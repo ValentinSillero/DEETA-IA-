@@ -14,6 +14,8 @@ import { can, getActiveMembership } from "@/data/membership";
 
 export const metadata: Metadata = { title: "Nueva venta" };
 
+const INITIAL_PRODUCTS = 60;
+
 export default async function SellPage({ searchParams }: { searchParams: Promise<{ cliente?: string }> }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   // Bloqueo en el servidor: ocultar el enlace no alcanza.
@@ -21,11 +23,13 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   // El cliente se valida contra el negocio de la sesión; un id ajeno se ignora.
   const customerId = params.cliente && /^[0-9a-f-]{36}$/i.test(params.cliente) ? params.cliente : null;
   const [products, openCash, onboarding, initialCustomer] = await Promise.all([
-    getSaleProductsForUser(session.user.id),
+    // Primera tanda chica; con más productos, la búsqueda va al servidor.
+    getSaleProductsForUser(session.user.id, "", INITIAL_PRODUCTS + 1),
     getOpenCashSessionForUser(session.user.id),
     getBusinessOnboardingStateForUser(session.user.id),
     customerId ? getActiveCustomerForSaleForUser(session.user.id, customerId) : Promise.resolve(null),
   ]);
+  const hasMore = products.length > INITIAL_PRODUCTS;
   const header = <div className="mb-6"><h1 className="page-title">Nueva venta</h1><p className="page-lead">{initialCustomer ? `Venta para ${initialCustomer.name}. Podés cobrarla o dejarla fiada.` : "Buscá, agregá y cobrá."}</p></div>;
 
   if (products.length === 0 && onboarding) {
@@ -44,13 +48,13 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
       <EmptyState
         className=""
         icon={PackagePlus}
-        title="No hay productos con stock"
-        description="Para vender, al menos un producto activo tiene que tener unidades disponibles."
+        title="No hay productos para vender"
+        description="Para vender, al menos un producto activo tiene que tener precio y unidades disponibles."
         actions={manage ? [{ label: "Cargar stock", href: "/productos?estado=out" }] : []}
         note={manage ? undefined : "Pedile a quien administra el negocio que cargue el stock."}
       />
     )}</div>;
   }
 
-  return <div>{header}<SaleComposer products={products} hasOpenCash={Boolean(openCash)} initialCustomer={initialCustomer} /></div>;
+  return <div>{header}<SaleComposer products={products.slice(0, INITIAL_PRODUCTS)} hasMore={hasMore} hasOpenCash={Boolean(openCash)} initialCustomer={initialCustomer} /></div>;
 }

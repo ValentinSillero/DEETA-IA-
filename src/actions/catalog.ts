@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { addCatalogProductsForUser } from "@/data/catalog";
+import { addCatalogProductsForUser, importCatalogForUser } from "@/data/catalog";
 import { FORBIDDEN_MESSAGE } from "@/lib/action-guard";
 import { catalogAddSchema } from "@/lib/catalog";
 import { requireFreshSession } from "@/lib/session";
@@ -57,5 +57,29 @@ export async function addCatalogProductsAction(rawItems: RawItem[]): Promise<Cat
   } catch (error) {
     console.error("No se pudieron agregar productos del catálogo", error);
     return { status: "error", message: "No pudimos agregar los productos. Intentá nuevamente." };
+  }
+}
+
+export type CatalogImportState =
+  | { status: "success"; created: number; existing: number; total: number }
+  | { status: "error"; message: string };
+
+// "Agregar todo el catálogo" o categorías enteras: una sola llamada; el servidor
+// hace todo en una sentencia (ver importCatalogForUser).
+export async function importCatalogAction(rawCategories: unknown): Promise<CatalogImportState> {
+  const session = await requireFreshSession();
+  const categories = Array.isArray(rawCategories)
+    ? [...new Set(rawCategories.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean))].slice(0, 100)
+    : null;
+  try {
+    const result = await importCatalogForUser(session.user.id, categories && categories.length > 0 ? categories : null);
+    if (!result.ok) return { status: "error", message: FORBIDDEN_MESSAGE };
+    revalidatePath("/productos");
+    revalidatePath("/dashboard");
+    revalidatePath("/vender");
+    return { status: "success", created: result.created, existing: result.existing, total: result.total };
+  } catch (error) {
+    console.error("No se pudo agregar el catálogo", error);
+    return { status: "error", message: "No pudimos agregar los productos. No se cargó ninguno; intentá nuevamente." };
   }
 }

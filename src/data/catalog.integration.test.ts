@@ -42,7 +42,7 @@ const csv = [
   `${code(3)},Fideos de prueba ${run},500 g,Fideos y arroz,Otra Marca,0,0,test`,
 ].join("\n");
 
-suite("catálogo sugerido", () => {
+suite("catálogo sugerido", { timeout: 30_000 }, () => {
   const sql = enabled ? neon(databaseUrl!) : null;
 
   beforeAll(async () => {
@@ -163,5 +163,56 @@ suite("catálogo sugerido", () => {
     const { catalogSuggestionForUser: forSeller } = await import("@/data/catalog");
     await sql!`delete from product where business_id = ${ids.businessA} and barcode = ${code(3)}`;
     expect(await forSeller(ids.sellerA, code(3))).toMatchObject({ canAdd: false });
+  });
+
+  it("importa por categoría y todo el catálogo sin duplicar ni afectar a otro negocio", { timeout: 60_000 }, async () => {
+    const { importCatalogForUser } = await import("@/data/catalog");
+    const { getSaleProductsForUser, completeSaleForUser } = await import("@/data/sales");
+    const catalogTotal = Number((await sql!`select count(*)::int as total from catalog_product`)[0].total);
+    const beforeB = Number((await sql!`select count(*)::int as total from product where business_id = ${ids.businessB}`)[0].total);
+    const ownedA = Number((await sql!`select count(*)::int as total from product p join catalog_product c on c.barcode = p.barcode where p.business_id = ${ids.businessA}`)[0].total);
+
+    const movementsBefore = Number((await sql!`select count(*)::int as total from stock_movement where business_id = ${ids.businessA}`)[0].total);
+    // Un vendedor no puede importar.
+    expect(await importCatalogForUser(ids.sellerA, null)).toEqual({ ok: false, reason: "FORBIDDEN" });
+
+    // Por categoría: solo esa categoría.
+    const bebidas = Number((await sql!`select count(*)::int as total from catalog_product where category = 'Bebidas'`)[0].total);
+    const byCategory = await importCatalogForUser(ids.ownerA, ["Bebidas"]);
+    expect(byCategory.ok && byCategory.total).toBe(bebidas);
+    const ownedBebidas = byCategory.ok ? byCategory.existing : -1;
+    expect(ownedBebidas).toBeGreaterThanOrEqual(1); // la gaseosa de prueba ya estaba
+
+    // Todo el catálogo: mide el tiempo real de la sentencia.
+    const start = performance.now();
+    const all = await importCatalogForUser(ids.ownerA, null);
+    const elapsed = performance.now() - start;
+    console.log(`Importar todo el catálogo (${catalogTotal} productos): ${elapsed.toFixed(0)} ms`);
+    expect(all).toEqual({ ok: true, created: catalogTotal - ownedA - (bebidas - ownedBebidas), existing: ownedA + (bebidas - ownedBebidas), total: catalogTotal });
+
+    // Segunda vez: no agrega nada.
+    const again = await importCatalogForUser(ids.ownerA, null);
+    expect(again).toEqual({ ok: true, created: 0, existing: catalogTotal, total: catalogTotal });
+
+    // Un producto por código, sin precio ni stock inventados y sin movimientos de stock.
+    const stats = (await sql!`
+      select count(*)::int as total, count(distinct barcode)::int as codes,
+        count(*) filter (where sale_price_cents = 0 and current_stock = 0)::int as without_price
+      from product where business_id = ${ids.businessA}`)[0];
+    expect(stats.total).toBe(stats.codes);
+    expect(Number(stats.without_price)).toBe(catalogTotal - ownedA - (bebidas - ownedBebidas) + (bebidas - ownedBebidas));
+    const movementsAfter = Number((await sql!`select count(*)::int as total from stock_movement where business_id = ${ids.businessA}`)[0].total);
+    expect(movementsAfter).toBe(movementsBefore); // la importación no inventa stock
+
+    // El negocio B no cambió.
+    expect(Number((await sql!`select count(*)::int as total from product where business_id = ${ids.businessB}`)[0].total)).toBe(beforeB);
+
+    // Sin precio no se vende: no aparece en Vender y el servidor rechaza cobrarlo aunque tenga stock.
+    const noPrice = (await sql!`select id, barcode from product where business_id = ${ids.businessA} and sale_price_cents = 0 limit 1`)[0];
+    await sql!`update product set current_stock = 5 where id = ${noPrice.id}`;
+    const sellable = await getSaleProductsForUser(ids.ownerA, String(noPrice.barcode));
+    expect(sellable.some((row) => row.id === noPrice.id)).toBe(false);
+    const sale = await completeSaleForUser(ids.ownerA, { items: [{ productId: String(noPrice.id), quantity: 1 }], paymentMethod: "TRANSFER" } as never);
+    expect(sale).toEqual({ ok: false, reason: "NO_PRICE" });
   });
 });

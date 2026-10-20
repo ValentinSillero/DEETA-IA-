@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Camera, FileUp, ListChecks, PackagePlus, Plus, SearchX } from "lucide-react";
+import { Archive, Camera, FileUp, ListChecks, PackagePlus, Plus, SearchX } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -6,12 +6,12 @@ import { redirect } from "next/navigation";
 import { CatalogStartCard } from "@/components/catalog/catalog-start-card";
 import { EmptyState } from "@/components/empty-state";
 import { ProductSearch } from "@/components/products/product-search";
-import { StockStatusBadge } from "@/components/products/stock-status-badge";
+import { ProductRows } from "@/components/products/product-rows";
 import {
   getProductsPageForUser,
+  PRODUCTS_PAGE_LIMIT,
   type ProductFilter,
 } from "@/data/products";
-import { formatMoney } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
 import { NoAccess } from "@/components/no-access";
 import { can, getActiveMembership } from "@/data/membership";
@@ -22,11 +22,12 @@ const filterLabels: Record<ProductFilter, string> = {
   active: "Activos",
   low: "Poco stock",
   out: "Sin stock",
+  noprice: "Sin precio",
   inactive: "Desactivados",
 };
 
 function isProductFilter(value: string | undefined): value is ProductFilter {
-  return value === "active" || value === "low" || value === "out" || value === "inactive";
+  return value === "active" || value === "low" || value === "out" || value === "inactive" || value === "noprice";
 }
 
 export default async function ProductsPage({
@@ -45,7 +46,9 @@ export default async function ProductsPage({
   const { products, counts } = pageData;
   const trulyEmpty = counts.active === 0 && counts.inactive === 0 && filter === "active" && !search;
 
-  const filterCounts: Partial<Record<ProductFilter, number>> = { active: counts.active, low: counts.low, out: counts.out, inactive: counts.inactive };
+  const filterCounts: Partial<Record<ProductFilter, number>> = { active: counts.active, low: counts.low, out: counts.out, inactive: counts.inactive, noprice: counts.noprice };
+  // Total del filtro actual, para avisar cuando la lista muestra solo una parte.
+  const filterTotal = search ? null : filterCounts[filter] ?? null;
 
   return (
     <div>
@@ -66,7 +69,7 @@ export default async function ProductsPage({
         <div className="mt-6 grid gap-3">
           <ProductSearch initialValue={search} />
           <nav className="-mx-4 scrollbar-none flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label="Filtrar productos">
-            {(Object.keys(filterLabels) as ProductFilter[]).map((value) => (
+            {(Object.keys(filterLabels) as ProductFilter[]).filter((value) => value !== "noprice" || counts.noprice > 0 || filter === "noprice").map((value) => (
               <Link
                 key={value}
                 href={value === "active" ? "/productos" : `/productos?estado=${value}`}
@@ -104,34 +107,13 @@ export default async function ProductsPage({
           <div className="hidden grid-cols-[minmax(0,1fr)_8rem_6rem_9rem_1.25rem] gap-4 border-b border-line bg-surface-2 px-5 py-2.5 text-xs font-semibold text-muted md:grid" aria-hidden="true">
             <span>Producto</span><span className="text-right">Precio</span><span className="text-right">Stock</span><span>Estado</span><span />
           </div>
-          <ul>
-            {products.map((product) => (
-              <li key={product.id} className="border-b border-line last:border-b-0">
-                <Link
-                  href={`/productos/${product.id}`}
-                  className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-surface-2 sm:px-5 md:grid-cols-[minmax(0,1fr)_8rem_6rem_9rem_1.25rem]"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">{product.name}</span>
-                    <span className="mt-0.5 block text-sm text-muted md:hidden">{formatMoney(product.salePriceCents)}</span>
-                  </span>
-                  <span className="figure hidden text-right text-base md:block">{formatMoney(product.salePriceCents)}</span>
-                  <span className="text-right">
-                    <span className="figure block text-lg leading-none md:text-base">{product.currentStock}</span>
-                    <span className="text-xs text-muted md:hidden">en stock</span>
-                  </span>
-                  <span className="col-span-2 md:col-span-1">
-                    {product.isActive ? (
-                      <StockStatusBadge currentStock={product.currentStock} minimumStock={product.minimumStock} compact />
-                    ) : (
-                      <span className="status text-muted"><Archive className="size-3.5" aria-hidden="true" /> Desactivado</span>
-                    )}
-                  </span>
-                  <ArrowRight className="hidden size-4 text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-ink md:block" aria-hidden="true" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ProductRows products={products} />
+          {products.length >= PRODUCTS_PAGE_LIMIT && (
+            <p className="border-t border-line bg-surface-2 px-4 py-3 text-sm text-muted sm:px-5">
+              {filterTotal ? `Mostrando ${products.length} de ${filterTotal.toLocaleString("es-AR")}. ` : `Mostrando los primeros ${products.length}. `}
+              Buscá por nombre o código para encontrar el resto.
+            </p>
+          )}
         </section>
       )}
     </div>

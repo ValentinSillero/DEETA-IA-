@@ -16,7 +16,11 @@ import type {
   StockMovementInput,
 } from "@/lib/product-validations";
 
-export type ProductFilter = "active" | "low" | "out" | "inactive";
+// "noprice": activos con precio de venta $0 (por ejemplo, agregados en masa desde el catálogo).
+export type ProductFilter = "active" | "low" | "out" | "inactive" | "noprice";
+// Productos muestra hasta 50 por filtro; el resto se encuentra buscando (en el servidor).
+// Con inventarios grandes, 100 filas pesaban ~190 KB por navegación; 50, la mitad.
+export const PRODUCTS_PAGE_LIMIT = 50;
 
 const activeCondition = eq(product.isActive, true);
 const lowStockCondition = and(
@@ -135,7 +139,8 @@ export async function getProductsPageForUser(
             and current_stock <= minimum_stock
         )::int as low,
         count(*) filter (where is_active = true and current_stock = 0)::int as out,
-        count(*) filter (where is_active = false)::int as inactive
+        count(*) filter (where is_active = false)::int as inactive,
+        count(*) filter (where is_active = true and sale_price_cents = 0)::int as noprice
       from scoped_products
     ), filtered_products as (
       select
@@ -151,10 +156,11 @@ export async function getProductsPageForUser(
         or (${filter} = 'low' and is_active = true and current_stock > 0 and minimum_stock > 0 and current_stock <= minimum_stock)
         or (${filter} = 'out' and is_active = true and current_stock = 0)
         or (${filter} = 'inactive' and is_active = false)
+        or (${filter} = 'noprice' and is_active = true and sale_price_cents = 0)
       )
         and (${search} = '' or name ilike ${`%${search}%`} or barcode ilike ${`%${search}%`})
       order by stock_order, current_stock, name
-      limit 200
+      limit ${PRODUCTS_PAGE_LIMIT}
     )
     select
       m.role,
@@ -162,6 +168,7 @@ export async function getProductsPageForUser(
       c.low,
       c.out,
       c.inactive,
+      c.noprice,
       coalesce(
         jsonb_agg(
           jsonb_build_object(
@@ -178,7 +185,7 @@ export async function getProductsPageForUser(
     from member m
     cross join counts c
     left join filtered_products fp on true
-    group by m.role, c.active, c.low, c.out, c.inactive
+    group by m.role, c.active, c.low, c.out, c.inactive, c.noprice
   `;
 
   const row = rows[0];
@@ -191,6 +198,7 @@ export async function getProductsPageForUser(
       low: Number(row.low),
       out: Number(row.out),
       inactive: Number(row.inactive),
+      noprice: Number(row.noprice),
     },
     products: (row.products as Array<Record<string, unknown>>).map((item) => ({
       id: String(item.id),

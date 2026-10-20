@@ -221,3 +221,52 @@ export async function addCatalogProductsForUser(userId: string, items: CatalogAd
   const created = new Set((row.created as string[]) ?? []);
   return { ok: true, created: created.size, skipped: unique.map((item) => item.barcode).filter((barcode) => !created.has(barcode)) };
 }
+
+export type ImportCatalogResult =
+  | { ok: true; created: number; existing: number; total: number }
+  | { ok: false; reason: "FORBIDDEN" };
+
+// "Agregar todo" (o por categorías): UNA sola sentencia en el servidor, sin
+// recorrer productos en el navegador ni hacer una consulta por producto.
+//  - La base toma el catálogo, descarta lo que el negocio ya tiene (índice
+//    único por negocio y código: `on conflict do nothing`) e inserta el resto.
+//  - Es atómica (una sentencia = una transacción implícita): o entra todo o nada.
+//  - Idempotente: la segunda vez no agrega nada.
+//  - Sin precio ni stock inventados: venta $0 = "Sin precio" (no se puede
+//    vender hasta cargarlo), compra $0 y stock 0, así que no hay movimiento de
+//    stock inicial (mismo criterio que el alta normal con stock 0).
+export async function importCatalogForUser(userId: string, categories: string[] | null): Promise<ImportCatalogResult> {
+  const rows = await getSqlClient().query(
+    `with member as (
+      select business_id
+      from active_membership
+      where user_id = $1 and role = any($2::member_role[])
+      limit 1
+    ), source as (
+      select c.barcode, ${PRODUCT_NAME_SQL} as name, c.category
+      from catalog_product c
+      cross join member
+      where $3::text[] is null or c.category = any($3::text[])
+    ), created_products as (
+      insert into product (
+        id, business_id, name, cost_price_cents, sale_price_cents,
+        current_stock, minimum_stock, barcode, category, is_active
+      )
+      select gen_random_uuid()::text, member.business_id, s.name, 0, 0, 0, 0, s.barcode, s.category, true
+      from source s
+      cross join member
+      on conflict (business_id, barcode) where barcode is not null do nothing
+      returning 1
+    )
+    select
+      (select count(*) from member)::int as members,
+      (select count(*) from source)::int as total,
+      (select count(*) from created_products)::int as created`,
+    [userId, rolesWith("PRODUCT_CREATE"), categories && categories.length > 0 ? categories : null],
+  ) as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (!row || Number(row.members) === 0) return { ok: false, reason: "FORBIDDEN" };
+  const total = Number(row.total);
+  const created = Number(row.created);
+  return { ok: true, created, existing: total - created, total };
+}

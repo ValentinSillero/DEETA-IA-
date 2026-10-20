@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { addCatalogProductsAction, type CatalogAddState } from "@/actions/catalog";
+import { CatalogBulkAdd } from "@/components/catalog/catalog-bulk-add";
 import type { CatalogCategory, CatalogItem, CatalogSearchResult } from "@/data/catalog";
 import { CATALOG_MAX_SELECTION, catalogProductName, effectiveCatalogQuery } from "@/lib/catalog";
 import { keepFocusOnPress, releaseFocus } from "@/lib/keep-focus";
@@ -195,6 +196,8 @@ export function CatalogPicker({ initial, categories }: { initial: CatalogSearchR
         {categories.filter((item) => !kioskOnly || item.kioskTotal > 0).map((item) => <button key={item.name} type="button" className="chip" data-active={category === item.name || undefined} aria-pressed={category === item.name} onClick={() => changeFilter(() => setCategory(category === item.name ? null : item.name))}>{item.name}</button>)}
       </nav>
     </div>
+
+    <CatalogBulkAdd categories={categories} onDone={() => { setPage(1); setReload((value) => value + 1); }} />
 
     {error ? <p className="notice-error mt-4" role="alert">{error}</p> : null}
     {!error && !loading && items.length === 0 ? <div className="panel mt-4 text-center"><p className="font-semibold">No encontramos productos</p><p className="mt-1 text-sm text-muted">Probá con otra palabra, la marca o el código de barras.</p></div> : null}

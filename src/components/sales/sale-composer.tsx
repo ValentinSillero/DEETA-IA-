@@ -26,7 +26,9 @@ const BarcodeScanner = dynamic(
   { ssr: false },
 );
 
-export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: { products: SaleProductDto[]; hasOpenCash: boolean; initialCustomer?: CustomerListItem | null }) {
+// `hasMore`: el negocio tiene más productos vendibles que los que vinieron en la
+// página. En ese caso la búsqueda se hace en el servidor (no se mandan todos).
+export function SaleComposer({ products, hasMore = false, hasOpenCash, initialCustomer = null }: { products: SaleProductDto[]; hasMore?: boolean; hasOpenCash: boolean; initialCustomer?: CustomerListItem | null }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -40,11 +42,30 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
   const [pairingId, setPairingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const visibleProducts = useMemo(() => {
+  const localProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("es");
     if (!query) return products;
     return products.filter((product) => product.name.toLocaleLowerCase("es").includes(query) || product.barcode?.includes(query));
   }, [products, search]);
+
+  // Inventario grande: con 2 o más letras se busca en el servidor (hasta 30
+  // resultados), con una espera breve y cancelando la búsqueda anterior.
+  const remoteQuery = hasMore && search.trim().length >= 2 ? search.trim() : "";
+  const [remote, setRemote] = useState<{ query: string; items: SaleProductDto[] } | null>(null);
+  useEffect(() => {
+    if (!remoteQuery) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/sale-products?q=${encodeURIComponent(remoteQuery)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<{ items: SaleProductDto[] }> : Promise.reject(new Error("search")))
+        .then((payload) => setRemote({ query: remoteQuery, items: payload.items }))
+        .catch(() => { /* Si falla, queda el filtro local. */ });
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [remoteQuery]);
+  const remoteReady = Boolean(remoteQuery) && remote?.query === remoteQuery;
+  const searchingRemote = Boolean(remoteQuery) && !remoteReady;
+  const visibleProducts = remoteReady ? remote!.items : localProducts;
   const totalCents = cart.reduce((total, line) => total + line.salePriceCents * line.quantity, 0);
   const units = cart.reduce((total, line) => total + line.quantity, 0);
 
@@ -65,6 +86,11 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
   }
 
   function addScanned(product: SaleProductDto | ScannerProductDto) {
+    // Sin precio ($0): no se puede vender hasta cargarlo (el servidor también lo rechaza).
+    if (product.salePriceCents <= 0) {
+      setScanNotice({ message: `${product.name} no tiene precio de venta. Cargalo en Productos para poder venderlo.`, barcode: product.barcode ?? undefined, missing: true });
+      return;
+    }
     setCart((current) => {
       const existing = current.find((line) => line.id === product.id);
       const quantity = existing?.quantity ?? 0;
@@ -162,7 +188,7 @@ export function SaleComposer({ products, hasOpenCash, initialCustomer = null }: 
               return <article key={product.id} className="list-row bg-surface"><div className="min-w-0 flex-1"><h2 className="truncate font-sans text-[0.98rem] font-semibold tracking-normal">{product.name}</h2><div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1"><p className="figure text-base">{formatMoney(product.salePriceCents)}</p><p className="text-sm text-muted">{product.currentStock} disp.</p>{inCart > 0 && <p className="text-sm font-semibold text-brand">{inCart} en carrito</p>}</div></div><button type="button" onClick={() => add(product)} disabled={inCart >= product.currentStock} className="grid size-12 shrink-0 place-items-center rounded-lg bg-ink text-white transition-colors hover:bg-ink-soft active:translate-y-px disabled:opacity-35" aria-label={`Agregar ${product.name}`}><Plus className="size-5" aria-hidden="true" /></button></article>;
             })}
           </div>
-          {visibleProducts.length === 0 && <div className="panel mt-5 text-center"><p className="font-bold">No encontramos productos con stock.</p><p className="mt-2 text-sm text-muted">Probá otra búsqueda.</p></div>}
+          {searchingRemote && <p className="mt-3 text-center text-sm text-muted" role="status">Buscando…</p>}{visibleProducts.length === 0 && !searchingRemote && <div className="panel mt-5 text-center"><p className="font-bold">No encontramos productos con stock.</p><p className="mt-2 text-sm text-muted">Probá otra búsqueda. Los productos sin precio no aparecen hasta que les cargues uno.</p></div>}{hasMore && !search.trim() && <p className="mt-3 text-center text-sm text-muted">Hay más productos: buscalos por nombre o código.</p>}
         </section>
         <aside className="panel sticky top-6 hidden min-h-0 overflow-hidden lg:flex">{cartContent}</aside>
       </div>
