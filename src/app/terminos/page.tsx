@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 // Fecha fija: se actualiza a mano cuando cambia el texto.
-const UPDATED_AT = "20 de octubre de 2026";
+const UPDATED_AT = "21 de octubre de 2026";
 
 export default function TermsPage() {
   return (
@@ -60,7 +60,7 @@ export default function TermsPage() {
       <p>Podés dejar de usar DEETA cuando quieras. Para pedir la eliminación de tu cuenta y de los datos asociados, comunicate con DEETA mediante los canales de contacto disponibles en el sitio.</p>
 
       <h2>10. Contacto</h2>
-      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio. El canal principal es WhatsApp.</p>
+      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio. El canal de contacto es el perfil de DEETA en X (Twitter).</p>
       <p>Estos términos se rigen por las leyes de la República Argentina.</p>
     </LegalDocument>
   );

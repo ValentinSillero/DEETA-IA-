@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 // Fecha fija: se actualiza a mano cuando cambia el texto.
-const UPDATED_AT = "20 de octubre de 2026";
+const UPDATED_AT = "21 de octubre de 2026";
 
 // Este texto describe el funcionamiento real de DEETA. Si cambia lo que se
 // guarda o los proveedores que intervienen, hay que actualizarlo.
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
     <LegalDocument title="Política de privacidad" updatedAt={UPDATED_AT}>
       <p>Esta política explica qué información guarda DEETA, para qué la usa, con quién la comparte y qué podés hacer con ella. DEETA está en etapa Beta: el servicio puede cambiar, tener errores o interrupciones, y esta política se va a actualizar cuando cambie lo que hacemos con los datos.</p>
       <p><strong>DEETA no vende los datos personales de sus usuarios.</strong></p>
-      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio; el canal principal es WhatsApp.</p>
+      <p>Podés comunicarte con DEETA mediante los canales de contacto disponibles en el sitio; el canal de contacto es el perfil de DEETA en X (Twitter).</p>
 
       <h2>1. Qué información guardamos</h2>
       <ul>

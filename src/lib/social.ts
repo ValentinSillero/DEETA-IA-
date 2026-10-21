@@ -1,5 +1,4 @@
-// Perfil público de DEETA en X (Twitter): canal de contacto secundario.
-// WhatsApp sigue siendo el canal principal (src/lib/support.ts).
+// Perfil público de DEETA en X (Twitter): el canal de contacto de DEETA.
 // Se configura con NEXT_PUBLIC_SOCIAL_X: acepta el usuario ("deeta" o "@deeta")
 // o la URL del perfil. Sin valor válido, el enlace no se muestra.
 

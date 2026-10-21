@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { MobileNavigation, SidebarHelpLink, SidebarNavigation } from "@/components/navigation/app-navigation";
+import { MobileNavigation, SidebarNavigation } from "@/components/navigation/app-navigation";
 import { BusinessSwitcher, MobileBusinessSwitch } from "@/components/navigation/business-switcher";
 import { SessionCachePrimer } from "@/components/navigation/session-cache-primer";
 import { SignOutButton } from "@/components/navigation/sign-out-button";
@@ -9,7 +9,6 @@ import { BetaTag, DeetaProductMark } from "@/components/ui/logo";
 import { can, getActiveMembership, getMembershipsForUser } from "@/data/membership";
 import { ROLE_LABELS, permissionsFor } from "@/lib/permissions";
 import { requireSession } from "@/lib/session";
-import { getSupportWhatsappNumber } from "@/lib/support";
 
 export default async function PrivateLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -23,8 +22,6 @@ export default async function PrivateLayout({ children }: { children: React.Reac
   const current = { name: membership.businessName, roleLabel: ROLE_LABELS[membership.role] };
   const settingsHref = can(membership, "BUSINESS_SETTINGS") ? "/configuracion/negocio" as const : null;
   const initial = session.user.name.trim().slice(0, 1).toUpperCase();
-  // Sin número configurado no se muestra el acceso a WhatsApp.
-  const supportEnabled = getSupportWhatsappNumber() !== null;
 
   return (
     <div className="min-h-dvh bg-canvas md:grid md:grid-cols-[248px_minmax(0,1fr)]">
@@ -37,7 +34,6 @@ export default async function PrivateLayout({ children }: { children: React.Reac
         <div className="mx-5 my-4 border-t border-line" />
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"><SidebarNavigation permissions={permissions} /></div>
         <div className="border-t border-line px-3 py-3">
-          {supportEnabled && <div className="mb-1"><SidebarHelpLink /></div>}
           <Link href="/configuracion/perfil" className="flex min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-surface-2" aria-label="Abrir mi cuenta">
             <span className="grid size-8 shrink-0 place-items-center rounded-md bg-ink text-sm font-bold text-white">{initial}</span>
             <span className="min-w-0"><span className="block truncate text-sm font-semibold">{session.user.name}</span><span className="block text-xs text-muted">Mi cuenta</span></span>
@@ -54,7 +50,7 @@ export default async function PrivateLayout({ children }: { children: React.Reac
         </header>
         <main id="contenido" className="mx-auto w-full max-w-[1160px] px-4 pb-28 pt-5 sm:px-6 md:px-8 md:pb-12 md:pt-8 lg:px-10">{children}</main>
       </div>
-      <div className="md:hidden"><MobileNavigation permissions={permissions} supportEnabled={supportEnabled} businessSwitch={<MobileBusinessSwitch memberships={memberships} />} /></div>
+      <div className="md:hidden"><MobileNavigation permissions={permissions} businessSwitch={<MobileBusinessSwitch memberships={memberships} />} /></div>
     </div>
   );
 }

@@ -1,11 +1,9 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-import { LandingSupportLink } from "@/components/support/landing-support-link";
 import { XProfileLink } from "@/components/support/x-profile-link";
 import { BetaTag, DeetaBrandLogo } from "@/components/ui/logo";
 import { getXProfile } from "@/lib/social";
-import { getSupportWhatsappNumber } from "@/lib/support";
 
 // Marco simple y legible para Términos y Privacidad: páginas públicas, sin sesión.
 export function LegalDocument({ title, updatedAt, children }: { title: string; updatedAt: string; children: React.ReactNode }) {
@@ -21,13 +19,12 @@ export function LegalDocument({ title, updatedAt, children }: { title: string; u
         <h1 className="page-title">{title}</h1>
         <p className="mt-2 text-sm text-muted">Última actualización: {updatedAt}</p>
         <div className="legal mt-8">{children}</div>
-        {(getSupportWhatsappNumber() || getXProfile()) && (
+        {getXProfile() && (
           <section className="mt-10 rounded-2xl border border-line bg-surface p-5" aria-labelledby="canales-contacto">
-            <h2 id="canales-contacto" className="text-base font-bold">Canales de contacto</h2>
-            <p className="mt-1 text-sm text-muted">Para consultas, pedidos de baja o temas de privacidad. El canal principal es WhatsApp.</p>
+            <h2 id="canales-contacto" className="text-base font-bold">Contacto</h2>
+            <p className="mt-1 text-sm text-muted">Para consultas, pedidos de baja o temas de privacidad, escribinos por X (Twitter).</p>
             <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              {getSupportWhatsappNumber() && <li><LandingSupportLink className="text-ink">WhatsApp</LandingSupportLink></li>}
-              {getXProfile() && <li><XProfileLink className="min-h-11 font-semibold text-ink" /></li>}
+              <li><XProfileLink className="min-h-11 font-semibold text-ink" /></li>
             </ul>
           </section>
         )}

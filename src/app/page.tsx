@@ -18,7 +18,6 @@ import {
   PublicFooter,
   Situations,
 } from "@/components/landing/sections";
-import { WhatsappFloat } from "@/components/support/whatsapp-float";
 import { isServerConfigured } from "@/lib/env";
 import { getSession } from "@/lib/session";
 
@@ -60,7 +59,6 @@ export default async function HomePage() {
         <FinalCta />
       </main>
       <PublicFooter />
-      <WhatsappFloat />
     </div>
   );
 }
