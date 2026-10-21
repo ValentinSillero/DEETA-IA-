@@ -50,6 +50,8 @@ describe("matriz central de permisos", () => {
     expect(rolesWith("SALE_CANCEL")).toEqual(["OWNER", "ADMIN", "MANAGER", "EMPLOYEE"]);
     expect(rolesWith("PROFITABILITY_VIEW")).toEqual(["OWNER", "ADMIN"]);
     expect(rolesWith("OWNER_MANAGE")).toEqual(["OWNER"]);
+    // Eliminar productos definitivamente: solo dueño y administrador.
+    expect(rolesWith("PRODUCT_DELETE")).toEqual(["OWNER", "ADMIN"]);
     expect(rolesWith("SALE_CREATE")).toEqual(["OWNER", "ADMIN", "MANAGER", "SELLER", "EMPLOYEE"]);
   });
 

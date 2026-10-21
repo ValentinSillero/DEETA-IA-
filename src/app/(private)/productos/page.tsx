@@ -33,7 +33,7 @@ function isProductFilter(value: string | undefined): value is ProductFilter {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ buscar?: string; estado?: string }>;
+  searchParams: Promise<{ buscar?: string; estado?: string; eliminado?: string }>;
 }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   // Bloqueo en el servidor: ocultar el enlace no alcanza.
@@ -64,6 +64,8 @@ export default async function ProductsPage({
           {can(membership, "PRODUCT_IMPORT") && <Link href="/productos/importar" className="button-secondary px-3"><FileUp className="size-5" aria-hidden="true" /> Importar</Link>}
         </div>
       </div>
+
+      {params.eliminado === "1" && <div className="notice-success mt-5" role="status">El producto se eliminó.</div>}
 
       {!trulyEmpty && (
         <div className="mt-6 grid gap-3">

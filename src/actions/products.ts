@@ -7,6 +7,7 @@ import {
   createProductForUser,
   getProductForUser,
   createStockMovementForUser,
+  deleteProductForUser,
   setProductActiveForUser,
   updateProductForUser,
 } from "@/data/products";
@@ -205,4 +206,39 @@ export async function setProductActiveAction(
     status: "success",
     message: isActive ? "El producto volvió a estar activo." : "El producto se desactivó.",
   };
+}
+
+const PRODUCT_HAS_HISTORY_MESSAGE =
+  "No se puede eliminar este producto porque tiene movimientos asociados. Podés desactivarlo para que deje de aparecer en ventas sin perder el historial.";
+
+export async function deleteProductAction(
+  _previousState: ProductFormState,
+  formData: FormData,
+): Promise<ProductFormState> {
+  const session = await requireFreshSession();
+  const denied = await permissionDenied(session.user.id, "PRODUCT_DELETE");
+  if (denied) return { status: "error", message: denied };
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) return { status: "error", message: "No pudimos encontrar ese producto." };
+
+  try {
+    // El servidor vuelve a revisar negocio, rol e historial: la interfaz solo ayuda.
+    const result = await deleteProductForUser(session.user.id, productId);
+    if (!result.ok) {
+      const message =
+        result.reason === "HAS_HISTORY"
+          ? PRODUCT_HAS_HISTORY_MESSAGE
+          : result.reason === "FORBIDDEN"
+            ? "Tu rol no permite eliminar productos."
+            : "No pudimos encontrar ese producto.";
+      return { status: "error", message };
+    }
+  } catch (error) {
+    console.error("No se pudo eliminar el producto", error);
+    return { status: "error", message: "No pudimos eliminar el producto. Intentá nuevamente." };
+  }
+
+  revalidatePath("/productos");
+  revalidatePath("/dashboard");
+  redirect("/productos?eliminado=1");
 }

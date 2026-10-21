@@ -4,9 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductActiveForm } from "@/components/products/product-active-form";
+import { ProductDeleteForm } from "@/components/products/product-delete-form";
 import { StockManager } from "@/components/products/stock-manager";
 import { StockStatusBadge } from "@/components/products/stock-status-badge";
-import { getMovementsForUser, getProductForUser } from "@/data/products";
+import { canDeleteFromMovements, getMovementsForUser, getProductForUser } from "@/data/products";
 import { formatMoney, formatMovementQuantity } from "@/lib/inventory";
 import { requireSession } from "@/lib/session";
 import { NoAccess } from "@/components/no-access";
@@ -62,6 +63,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   if (!record) notFound();
   const item = record.product;
   const margin = item.salePriceCents - item.costPriceCents;
+  // Solo orienta a la interfaz: el servidor vuelve a revisar todo al eliminar.
+  const deletable = canDeleteFromMovements(movements.map(({ movement }) => movement));
 
   const groups = movements.reduce<Map<string, typeof movements>>((map, movement) => {
     const label = dateLabel(movement.movement.createdAt);
@@ -98,7 +101,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           ) : (
             <section className="panel"><h2 className="text-lg font-black">Producto desactivado</h2><p className="mt-2 text-sm leading-6 text-muted">Reactivá el producto para volver a registrar movimientos.</p></section>
           )}
-          {can(membership, "PRODUCT_EDIT") && <ProductActiveForm productId={item.id} isActive={item.isActive} />}
+          {(can(membership, "PRODUCT_EDIT") || can(membership, "PRODUCT_DELETE")) && (
+            <section className="panel space-y-3" aria-labelledby="product-actions-title">
+              <h2 id="product-actions-title" className="text-lg font-black">Acciones</h2>
+              {can(membership, "PRODUCT_EDIT") && <ProductActiveForm productId={item.id} isActive={item.isActive} />}
+              {can(membership, "PRODUCT_DELETE") && (deletable ? (
+                <ProductDeleteForm productId={item.id} productName={item.name} />
+              ) : (
+                <p className="text-sm leading-6 text-muted">Este producto tiene movimientos, por eso no se puede eliminar. Desactivarlo conserva su historial.</p>
+              ))}
+            </section>
+          )}
         </div>
 
         <section className="panel min-w-0">

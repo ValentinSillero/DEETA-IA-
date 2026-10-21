@@ -376,6 +376,66 @@ export async function setProductActiveForUser(
   return updated ?? null;
 }
 
+// Un producto se puede eliminar definitivamente solo si nunca formó parte del
+// historial: sin ventas, sin escaneos y sin movimientos de stock salvo, como
+// mucho, el stock inicial de su alta (que se borra con él).
+export function canDeleteFromMovements(movements: { type: string }[]) {
+  return movements.length <= 1 && movements.every((movement) => movement.type === "INITIAL");
+}
+
+export type ProductDeleteResult =
+  | { ok: true; name: string }
+  | { ok: false; reason: "NOT_FOUND" | "FORBIDDEN" | "HAS_HISTORY" };
+
+// Todo en una sola sentencia: el producto se bloquea, se revisan sus referencias
+// y se borra solo si está limpio. El negocio sale de la membresía activa, nunca
+// del navegador. El catálogo global no se toca.
+export async function deleteProductForUser(userId: string, productId: string): Promise<ProductDeleteResult> {
+  const sqlClient = getSqlClient();
+  let rows: { allowed: boolean; has_history: boolean; deleted: number; name: string }[];
+  try {
+    rows = (await sqlClient`
+      with target as (
+        select p.id, p.business_id, p.name,
+          m.role = any(${rolesWith("PRODUCT_DELETE")}::member_role[]) as allowed
+        from product p
+        inner join active_membership m on m.business_id = p.business_id and m.user_id = ${userId}
+        where p.id = ${productId}
+        for update of p
+      ), history as (
+        select t.id,
+          exists (select 1 from sale_item si where si.product_id = t.id and si.business_id = t.business_id)
+          or exists (select 1 from scanner_scan_event e where e.product_id = t.id and e.business_id = t.business_id)
+          or exists (select 1 from stock_movement sm where sm.product_id = t.id and sm.business_id = t.business_id and sm.type <> 'INITIAL')
+          or (select count(*) from stock_movement sm where sm.product_id = t.id and sm.business_id = t.business_id) > 1
+          as has_history
+        from target t
+      ), deleted as (
+        delete from product p
+        using target t, history h
+        where p.id = t.id and p.business_id = t.business_id and h.id = t.id
+          and t.allowed and not h.has_history
+        returning p.id
+      )
+      select t.allowed, h.has_history, t.name, (select count(*) from deleted)::int as deleted
+      from target t inner join history h on h.id = t.id
+    `) as typeof rows;
+  } catch (error) {
+    // Una venta registrada al mismo tiempo frena el borrado por la clave foránea.
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "23503" || (error instanceof Error && error.message.includes("foreign key"))) {
+      return { ok: false, reason: "HAS_HISTORY" };
+    }
+    throw error;
+  }
+
+  const [row] = rows;
+  if (!row) return { ok: false, reason: "NOT_FOUND" };
+  if (!row.allowed) return { ok: false, reason: "FORBIDDEN" };
+  if (row.has_history || row.deleted !== 1) return { ok: false, reason: "HAS_HISTORY" };
+  return { ok: true, name: row.name };
+}
+
 export type StockUpdateResult =
   | { ok: true; previousStock: number; resultingStock: number; quantity: number }
   | { ok: false; reason: "NOT_FOUND" | "INACTIVE" | "INSUFFICIENT_STOCK" };
