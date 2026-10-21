@@ -1,8 +1,9 @@
 // Perfil público de DEETA en X (Twitter): el canal de contacto de DEETA.
-// Se configura con NEXT_PUBLIC_SOCIAL_X: acepta el usuario ("deeta" o "@deeta")
-// o la URL del perfil. Sin valor válido, el enlace no se muestra.
+// Por defecto es @valensilleroo; NEXT_PUBLIC_SOCIAL_X lo reemplaza si hace falta
+// (acepta el usuario, "deeta" o "@deeta", o la URL del perfil).
 
 const HANDLE = /^[A-Za-z0-9_]{1,15}$/;
+export const DEFAULT_X_HANDLE = "valensilleroo";
 
 export function normalizeXProfile(raw: string | null | undefined) {
   const value = raw?.trim();
@@ -23,5 +24,5 @@ export function normalizeXProfile(raw: string | null | undefined) {
 }
 
 export function getXProfile() {
-  return normalizeXProfile(process.env.NEXT_PUBLIC_SOCIAL_X);
+  return normalizeXProfile(process.env.NEXT_PUBLIC_SOCIAL_X) ?? { handle: DEFAULT_X_HANDLE, url: `https://x.com/${DEFAULT_X_HANDLE}` };
 }

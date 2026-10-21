@@ -20,8 +20,13 @@ describe("perfil de X", () => {
     expect(normalizeXProfile("nombre con espacios")).toBeNull();
   });
 
-  it("sin variable no hay perfil", () => {
+  it("sin variable (o con un valor inválido) usa @valensilleroo", () => {
+    const fallback = { handle: "valensilleroo", url: "https://x.com/valensilleroo" };
     vi.stubEnv("NEXT_PUBLIC_SOCIAL_X", "");
-    expect(getXProfile()).toBeNull();
+    expect(getXProfile()).toEqual(fallback);
+    vi.stubEnv("NEXT_PUBLIC_SOCIAL_X", "https://evil.com/x");
+    expect(getXProfile()).toEqual(fallback);
+    vi.stubEnv("NEXT_PUBLIC_SOCIAL_X", "@otra_cuenta");
+    expect(getXProfile()?.handle).toBe("otra_cuenta");
   });
 });

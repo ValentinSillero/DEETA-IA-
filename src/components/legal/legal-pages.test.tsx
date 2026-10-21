@@ -41,7 +41,7 @@ describe("páginas legales", () => {
     }
     vi.unstubAllEnvs();
     vi.stubEnv("NEXT_PUBLIC_SOCIAL_X", "");
-    expect(renderToStaticMarkup(<PrivacyPage />)).not.toContain('id="canales-contacto"');
+    expect(renderToStaticMarkup(<PrivacyPage />)).toContain('href="https://x.com/valensilleroo"');
     vi.unstubAllEnvs();
   });
 

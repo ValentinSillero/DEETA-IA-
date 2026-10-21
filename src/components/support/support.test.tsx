@@ -38,12 +38,10 @@ describe("contacto por X", () => {
     expect(html.indexOf("Empezar gratis")).toBeLessThan(html.indexOf("Beta gratuita"));
   });
 
-  it("sin perfil configurado no muestra Contacto ni rompe la página", () => {
+  it("sin variable, Contacto lleva a @valensilleroo", () => {
     vi.stubEnv("NEXT_PUBLIC_SOCIAL_X", "");
-    expect(renderToStaticMarkup(<XProfileLink>Contacto</XProfileLink>)).toBe("");
-    const html = renderToStaticMarkup(<><FinalCta /><PublicFooter /></>);
-    expect(html).toContain("Empezar gratis");
-    expect(html).not.toContain("x.com");
-    expect(html).toContain('href="/terminos"');
+    expect(renderToStaticMarkup(<XProfileLink>Contacto</XProfileLink>)).toContain('href="https://x.com/valensilleroo"');
+    const html = renderToStaticMarkup(<PublicFooter />);
+    expect(xLinks(html).map((link) => link.url)).toEqual(["https://x.com/valensilleroo"]);
   });
 });
